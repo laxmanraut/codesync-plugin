@@ -103,26 +103,11 @@ If they say *edit*, ask what to change, revise the proposal, and show it again. 
 
 If they say *cancel*, STOP without writing anything to `_roles/` or to the config.
 
-## Step 6 — Write the role file and update config
+## Step 6 — Write the role file
 
-Once the user confirms:
+Once the user confirms, **write the role profile** to `<CONTRACTS_DIR>/_roles/<role-name>.md` with the exact markdown from step 5.
 
-1. **Write the role profile** to `<CONTRACTS_DIR>/_roles/<role-name>.md` with the exact markdown from step 5.
-
-2. **Merge the role into `~/.config/codesync/config.json`** (preserves the fields the install script wrote). Use the Bash tool to run the command below. CRITICAL: substitute `<ROLE>` (the kebab-case role name) and `<ROLE_FILE>` (the absolute path to the role markdown file) BEFORE invoking Bash. Never run the literal text with the placeholders unfilled — that will write garbage into the config.
-
-```bash
-python3 -c '
-import json, os, sys
-path = os.path.expanduser("~/.config/codesync/config.json")
-with open(path) as f: cfg = json.load(f)
-cfg["role"] = sys.argv[1]
-cfg["role_file"] = sys.argv[2]
-with open(path, "w") as f:
-    json.dump(cfg, f, indent=2)
-    f.write("\n")
-' "<ROLE>" "<ROLE_FILE>"
-```
+Do NOT write the role name anywhere else — roles are activated per-terminal via the `CODESYNC_ROLE` environment variable, not stored machine-wide. The role profile in `_roles/` is just the *definition*; activation is the user's job (see step 7).
 
 ## Step 7 — Tell the user what to do next
 
@@ -131,12 +116,21 @@ Print exactly this template (substituting the real values):
 ```
 ✓ CodeSync installed on this machine.
 
-  Role:           <role-name>
   Device ID:      <DEVICE_ID>
   Contracts dir:  <CONTRACTS_DIR>
   Role profile:   <CONTRACTS_DIR>/_roles/<role-name>.md
 
-Next:
+To activate this role in THIS terminal, exit Claude Code and run in your shell:
+
+    export CODESYNC_ROLE=<role-name>
+
+Then re-open Claude Code. /codesync-status will confirm the role is active.
+
+Roles are per-terminal — set CODESYNC_ROLE separately in each shell where you
+want to act as a role. A wrapper function in your ~/.zshrc makes it ergonomic
+(see the plugin README).
+
+Next steps:
   1. Send the Device ID above to your colleague.
   2. On their Mac they install this plugin and run /install-codesync.
      They'll describe their own role and get their own Device ID back.
@@ -144,13 +138,12 @@ Next:
         /codesync-pair --peer <other-machine's-device-id>
      Pairing is idempotent and order-independent. Sync starts
      automatically when both sides have done it.
-  4. Verify with /codesync-status — it shows whether Syncthing is
-     up, whether peers are connected, and which role profiles have
-     synced into _roles/.
+  4. Verify with /codesync-status — it shows whether Syncthing is up,
+     whether peers are connected, the role profiles known across all
+     machines, and which one is active in this terminal.
 
-Once paired, Syncthing mirrors ~/contracts/ — including _roles/ —
-between both machines, and either Claude can read all role profiles
-to route contracts correctly.
+To register an additional role later (e.g., this machine also acts as
+mobile dev sometimes), run /codesync-role-new.
 ```
 
 ## Constraints

@@ -28,11 +28,10 @@ cfg_path, api, api_key, status_ok = sys.argv[1:5]
 with open(cfg_path) as f:
     cfg = json.load(f)
 
-role         = cfg.get("role", "")
-role_file    = cfg.get("role_file", "")
 contracts    = cfg.get("contracts_dir", "")
 device_id    = cfg.get("device_id", "")
 folder_id    = cfg.get("syncthing_folder_id", "")
+active_role  = os.environ.get("CODESYNC_ROLE", "").strip()
 
 def get(path, timeout=5):
     req = urllib.request.Request(f"{api}{path}", headers={"X-API-Key": api_key})
@@ -44,12 +43,14 @@ def fmt(v): return v if v else "(not set)"
 print()
 print("CodeSync status")
 print("───────────────")
-print(f"  Role:           {fmt(role)}")
-print(f"  Role profile:   {fmt(role_file)}")
-print(f"  Contracts dir:  {fmt(contracts)}")
-print(f"  Device ID:      {fmt(device_id)}")
+if active_role:
+    print(f"  Active role (this terminal):  {active_role}")
+else:
+    print( "  Active role (this terminal):  (none — set CODESYNC_ROLE in your shell)")
+print(f"  Contracts dir:                {fmt(contracts)}")
+print(f"  Device ID:                    {fmt(device_id)}")
 print()
-print(f"  Syncthing API:  {'reachable' if status_ok == 'yes' else 'NOT REACHABLE'}")
+print(f"  Syncthing API:                {'reachable' if status_ok == 'yes' else 'NOT REACHABLE'}")
 
 if status_ok != "yes":
     print()
@@ -106,13 +107,12 @@ if roles_dir and os.path.isdir(roles_dir):
         if f.endswith(".md") and f != "README.md"
     )
     if not files:
-        print("    (none registered yet — run /install-codesync on this machine)")
+        print("    (none registered yet — run /install-codesync or /codesync-role-new)")
     else:
-        own = os.path.abspath(role_file) if role_file else ""
         for rf in files:
-            full = os.path.abspath(os.path.join(roles_dir, rf))
-            tag = "  ← this machine" if full == own else ""
-            print(f"    {rf[:-3]}{tag}")
+            name = rf[:-3]
+            tag = "  ← active here" if name == active_role else ""
+            print(f"    {name}{tag}")
 else:
     print("    (contracts directory or _roles/ not found)")
 
