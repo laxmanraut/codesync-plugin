@@ -18,10 +18,10 @@ If `--peer` is present but the value clearly isn't a device ID (e.g., too short,
 
 ## Step 2 — Run the pair script
 
-Substitute `<PEER_DEVICE_ID>` with the value parsed in step 1:
+Once step 1 has validated that the user supplied `--peer <device-id>`, run the pair script. The script reads the user's `--peer` argument directly from `$ARGUMENTS` — no Claude-side substitution is needed.
 
 ```!
-"${CLAUDE_PLUGIN_ROOT}/scripts/pair-peer.sh" "<PEER_DEVICE_ID>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/pair-peer.sh" $ARGUMENTS
 ```
 
 The script is idempotent. Its last two lines are:

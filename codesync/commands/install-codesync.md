@@ -109,9 +109,9 @@ Once the user confirms:
 
 1. **Write the role profile** to `<CONTRACTS_DIR>/_roles/<role-name>.md` with the exact markdown from step 5.
 
-2. **Merge the role into `~/.config/codesync/config.json`** (this preserves the fields the install script wrote). Substitute `<ROLE>` with the kebab-case role name and `<ROLE_FILE>` with the absolute path to the role markdown:
+2. **Merge the role into `~/.config/codesync/config.json`** (preserves the fields the install script wrote). Use the Bash tool to run the command below. CRITICAL: substitute `<ROLE>` (the kebab-case role name) and `<ROLE_FILE>` (the absolute path to the role markdown file) BEFORE invoking Bash. Never run the literal text with the placeholders unfilled — that will write garbage into the config.
 
-```!
+```bash
 python3 -c '
 import json, os, sys
 path = os.path.expanduser("~/.config/codesync/config.json")

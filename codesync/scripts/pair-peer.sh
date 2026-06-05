@@ -11,9 +11,21 @@ API="http://127.0.0.1:8384"
 log() { printf '  %s\n' "$*"; }
 err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-# 1. Args
-[ $# -ge 1 ] || err "Usage: pair-peer.sh <peer-device-id>"
-PEER_ID="$1"
+# 1. Args — accept --peer <id>; other args are tolerated and ignored
+PEER_ID=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --peer)
+      [ $# -ge 2 ] || err "--peer requires a value"
+      PEER_ID="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+[ -n "$PEER_ID" ] || err "Usage: pair-peer.sh --peer <peer-device-id>"
 
 # 2. Load our config (install must have run first)
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
