@@ -32,7 +32,7 @@ CodeSync projects on this machine:
 
   lead_inbox                       ← active in this terminal
     Path:        /Users/admin/codesync/lead_inbox
-    Folder ID:   codesync-contracts
+    Folder ID:   codesync-lead_inbox
 
   mobile-app
     Path:        /Users/admin/codesync/mobile-app

@@ -89,9 +89,51 @@ try:
     else:
         suppressed = 0
 
-    items  = [f"+ {p}" for p in sorted(new_files)]
-    items += [f"~ {p}" for p in sorted(changed)]
-    items += [f"- {p}" for p in sorted(deleted)]
+    # Read frontmatter for new/changed files to enrich the display.
+    # Deletions can't be enriched (file is gone).
+    import re
+    FM_RE = re.compile(r'\A---\s*\n(.*?)\n---', re.DOTALL)
+    def parse_fm(path):
+        try:
+            with open(path) as f:
+                head = f.read(4096)
+            m = FM_RE.match(head)
+            if not m:
+                return None
+            in_cs = False
+            fm = {}
+            for line in m.group(1).splitlines():
+                if line.strip() == "codesync:":
+                    in_cs = True; continue
+                if in_cs and line.startswith("  "):
+                    kv = line[2:]
+                    if ":" in kv:
+                        k, v = kv.split(":", 1)
+                        fm[k.strip()] = v.strip().strip('"').strip("'")
+                else:
+                    in_cs = False
+            return fm if fm else None
+        except OSError:
+            return None
+
+    def label(p):
+        full = os.path.join(proj_path, p)
+        fm = parse_fm(full)
+        if not fm:
+            return p
+        status = fm.get("status", "")
+        title  = fm.get("title", "")
+        frm    = fm.get("from", "")
+        parts = []
+        if status: parts.append(f"[{status}]")
+        if title:  parts.append(title)
+        if frm:    parts.append(f"(from {frm})")
+        prefix = " ".join(parts) if parts else ""
+        return f"{prefix}  {p}" if prefix else p
+
+    items  = [f"+ {label(p)}" for p in sorted(new_files)]
+    items += [f"~ {label(p)}" for p in sorted(changed)]
+    items += [f"- {p}" for p in sorted(deleted)]  # deleted: file gone, no frontmatter to read
 
     if not items and suppressed == 0:
         sys.exit(0)

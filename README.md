@@ -1,8 +1,10 @@
 # codesync
 
-A Claude Code plugin that lets collaborators on different laptops coordinate work through shared folders — no cloud service, no central server.
+A Claude Code plugin for coordinating work between AI-augmented collaborators across machines — no cloud service, no central server.
 
-Backed by [Syncthing](https://syncthing.net) for peer-to-peer folder sync. The plugin organises work into **projects** (each its own Syncthing folder, with potentially different peers) and **roles** (the part you play within a project: backend, frontend, mobile, devops, whatever fits). Each terminal picks one project + role via environment variables, so the same laptop can act as different roles in different terminals — even across different projects.
+The mental model: each **project** is a peer-to-peer synced folder. Inside each project, work is **role-addressed** — backend, frontend, mobile, devops, whatever fits — via per-role inbox folders. Notes, tasks, design discussions, decisions, and questions flow through those inboxes, and Claude agents on each machine read and write them on behalf of their human. Each terminal picks one project + role, so the same laptop can act as different roles in different terminals — even across different projects.
+
+Backed by [Syncthing](https://syncthing.net) for the actual peer-to-peer sync. Anything you write to a project folder ends up on your collaborator's machine within seconds (LAN) or minutes (over the internet). Anything they write ends up on yours.
 
 ## Requirements
 
@@ -140,6 +142,53 @@ If you want to invite an already-paired peer to a **different** project, set `CO
 
 When you have content for another role, drop it under `_inbox/<their-role>/`. When they reply, they drop it under `_inbox/<your-role>/`.
 
+## Threads — structured notes, tasks, and replies
+
+A *thread* is a markdown file with a small YAML header that declares who wrote it, who it's for, what status it has, and (optionally) what earlier thread it replies to. Threads live in role-addressed inboxes inside a project: `_inbox/<recipient-role>/<slug>.md`.
+
+### Frontmatter shape
+
+```markdown
+---
+codesync:
+  from: backend
+  to: frontend
+  status: todo            # todo | wip | done | blocked | note
+  title: "Auth v2 endpoint ready to wire up"
+  created: 2026-06-06T01:23:00Z
+  replies-to: _inbox/backend/auth-v2-question.md   # optional, for replies
+---
+
+# Auth v2 endpoint ready to wire up
+
+(write your note / task / discussion here)
+```
+
+Status semantics:
+- `todo` / `wip` / `done` / `blocked` — actionable items the recipient role is meant to act on (or report back on).
+- `note` — informational. No workflow expectation; just context, a decision, a question, an FYI, design discussion.
+
+Roles aren't restricted to one status convention — same `to`-role can receive a mix of tasks and notes.
+
+### Three slash commands for threads
+
+| Command | What it does |
+|---|---|
+| `/codesync-thread-new` | Interactive — asks who the thread is for, what status, what title, what body. Writes the file with frontmatter into the right inbox. |
+| `/codesync-thread-list` | Lists threads in the active role's inbox, with status + title + sender + age. `--all` shows every role's inbox. `--status <s>` filters by status. |
+| `/codesync-thread-reply <slug>` | Creates a reply file addressed back to the original thread's sender, with `replies-to` set automatically. |
+
+### Auto-check enrichment
+
+When the post-turn Stop hook surfaces a new/changed thread file, it reads the frontmatter to show:
+
+```
+[codesync project=lead_inbox, role=backend] 1 change(s) for you:
+  + [todo] Refactor lead inbox pagination (from frontend)  _inbox/backend/refactor-lead-inbox-pagination.md
+```
+
+Files without frontmatter (free-form markdown you write by hand) still surface, just without the status/title prefix.
+
 ## Post-turn auto-check
 
 After every Claude turn, a Stop hook walks the active project's folder and surfaces anything new/changed/deleted since the last check. When `CODESYNC_ROLE` is set, it filters to only items addressed to that role (under `_inbox/<role>/`) plus role-profile changes — other changes get a one-line "N changes outside your inbox" count.
@@ -157,6 +206,9 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 | `/codesync-pair --peer <id>` | Pair a brand-new peer at the device level and invite them to the active project in one step. |
 | `/codesync-role-new` | Register a role in the active project (or update an existing one). |
 | `/codesync-role-list` | List roles in the active project; mark the active one. |
+| `/codesync-thread-new` | Start a new thread (note / task / decision / question) addressed to another role. |
+| `/codesync-thread-list` | List threads in your role's inbox (or all inboxes with `--all`); filter by status. |
+| `/codesync-thread-reply <slug>` | Reply to an existing thread; auto-addresses the reply back to the original sender. |
 | `/codesync-status` | Active project + role, Syncthing health, peers attached to the active project, folder sync state, registered roles. |
 
 All commands except `/install-codesync` and `/codesync-project-new` require `CODESYNC_PROJECT` to be set in the terminal.
@@ -175,4 +227,6 @@ Your collaborator runs the same migration when they update. Both of you pick the
 
 ## What's coming
 
-A structured-thread format with YAML frontmatter on contract files (so the auto-check can also route by explicit metadata like `to: backend`, not just by inbox path). Plus CWD auto-detection of the active project (so `cd ~/code/lead_inbox` auto-sets `CODESYNC_PROJECT` for that terminal).
+CWD auto-detection — so `cd ~/code/lead_inbox` automatically activates that project for the terminal (via a `.codesync/project.yaml` marker file the plugin walks up the directory tree to find), without having to `export CODESYNC_PROJECT=` manually each shell. Env var override stays for power users.
+
+Possibly: a `/codesync-thread-set-status <slug> <status>` to move a task through `todo → wip → done` without re-opening the file. And a `/codesync-thread-archive` that moves resolved threads out of the active inbox into `_archive/`.
