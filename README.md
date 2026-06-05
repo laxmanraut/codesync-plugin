@@ -185,14 +185,16 @@ Status semantics:
 
 Roles aren't restricted to one status convention — same `to`-role can receive a mix of tasks and notes.
 
-### Three slash commands for threads
+### Slash commands for threads
 
 | Command | What it does |
 |---|---|
 | `/codesync-thread-new` | Interactive — asks who the thread is for, what status, what title, what body. Writes the file with frontmatter into the right inbox. |
-| `/codesync-thread-list` | Lists threads in the active role's inbox, with status + title + sender + age. `--all` shows every role's inbox. `--status <s>` filters by status. |
+| `/codesync-thread-list` | Lists threads in the active role's inbox, with status + title + sender + age. `--all` shows every role's inbox. `--status <s>` filters by status. `--archive` lists archived threads, `--include-archive` shows both. |
 | `/codesync-thread-reply <slug>` | Creates a reply file addressed back to the original thread's sender, with `replies-to` set automatically. |
 | `/codesync-thread-set-status <slug> <status>` | Moves a thread between `todo` / `wip` / `done` / `blocked` / `note` without opening the file. Atomic rewrite of the status field only. |
+| `/codesync-thread-archive <slug>` | Moves a resolved or stale thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved. |
+| `/codesync-thread-unarchive <slug>` | Reverse of archive — moves an archived thread back into the active inbox. |
 
 ### Auto-check enrichment
 

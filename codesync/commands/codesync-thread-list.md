@@ -1,6 +1,6 @@
 ---
 description: List threads in the active project's inbox for the active role (or all inboxes with --all)
-argument-hint: "[--all] [--status <todo|wip|done|blocked|note>]"
+argument-hint: "[--all] [--status <todo|wip|done|blocked|note>] [--archive | --include-archive]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/list-threads.sh:*)"]
 ---
 
