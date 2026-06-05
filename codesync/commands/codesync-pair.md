@@ -1,12 +1,17 @@
 ---
-description: Pair this machine with a peer Syncthing device and share the contracts folder
+description: Pair this machine with a peer Syncthing device (and invite them to the active project's folder if CODESYNC_PROJECT is set)
 argument-hint: "--peer <device-id>"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pair-peer.sh:*)"]
 ---
 
 # Pair CodeSync with a peer
 
-The user invoked `/codesync-pair $ARGUMENTS`.
+The user invoked `/codesync-pair $ARGUMENTS`. This is two operations bundled:
+
+1. Adds the peer to Syncthing's known devices (machine-level).
+2. If `CODESYNC_PROJECT` is set in this terminal, also invites the peer to that project's folder.
+
+If you want to invite an already-paired peer to an additional project, use `/codesync-project-invite --peer <id>` from a terminal with `CODESYNC_PROJECT` set to that project.
 
 ## Step 1 — Parse the peer device ID
 
@@ -24,32 +29,44 @@ Once step 1 has validated that the user supplied `--peer <device-id>`, run the p
 "${CLAUDE_PLUGIN_ROOT}/scripts/pair-peer.sh" $ARGUMENTS
 ```
 
-The script is idempotent. Its last two lines are:
+The script is idempotent. Its last three lines are:
 
 ```
 PAIRED_WITH=<peer device id>
 PEER_SHORT_NAME=<short label assigned locally to the peer>
+INVITED_TO=<project name or empty>
 ```
 
 If the script exited non-zero, surface its error message and STOP.
 
 ## Step 3 — Tell the user what's next
 
-Print exactly this template (substituting real values):
+If `INVITED_TO` is non-empty (the peer was also invited to the active project), print:
 
 ```
-✓ Paired with peer <PAIRED_WITH>.
+✓ Paired with peer <PAIRED_WITH> and invited them to project '<INVITED_TO>'.
    Local label:  <PEER_SHORT_NAME>
 
-Pairing is symmetric — sync starts automatically once BOTH machines have
-run /codesync-pair. If your colleague hasn't run it yet, send them your
-own Device ID (find it with /codesync-status) and have them run on their
-Mac:
+Sync starts when BOTH machines have done the same. Have your collaborator
+on their Mac run (with CODESYNC_PROJECT=<INVITED_TO> set in their shell):
 
    /codesync-pair --peer <your-device-id>
 
-Then run /codesync-status here to confirm both machines are connected
-and the contracts folder is syncing.
+Then run /codesync-status here to confirm peers are connected and the
+project folder is syncing.
+```
+
+If `INVITED_TO` is empty (no project was active when pairing happened), print:
+
+```
+✓ Paired with peer <PAIRED_WITH> at the device level.
+   Local label:  <PEER_SHORT_NAME>
+
+No project was active in this terminal (CODESYNC_PROJECT was not set), so
+no folder is being shared yet. To share a project with this peer, set
+CODESYNC_PROJECT in your shell and run:
+
+   /codesync-project-invite --peer <PAIRED_WITH>
 ```
 
 ## Constraints

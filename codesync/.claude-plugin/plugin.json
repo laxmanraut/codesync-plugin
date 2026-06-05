@@ -1,6 +1,6 @@
 {
   "name": "codesync",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Coordinate API contracts across collaborators on different laptops via Syncthing. Each install registers a role profile in a shared folder; Claude agents on each machine read and write OpenAPI YAML files in ~/contracts/ to hand work between roles without a server in the middle.",
   "author": {
     "name": "laxman"

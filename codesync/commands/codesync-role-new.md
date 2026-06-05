@@ -1,22 +1,28 @@
 ---
-description: Register a new role profile (or update an existing one) for this machine
+description: Register a new role profile (or update an existing one) for the active project
 argument-hint: "(no arguments — interactive)"
-allowed-tools: []
+allowed-tools: ["Bash(printenv:*)"]
 ---
 
 # Register a CodeSync role
 
-The user invoked `/codesync-role-new`. This command adds (or updates) a role profile in `~/contracts/_roles/`. The plugin's first-time `/install-codesync` already created your first role; use this command to register additional ones or revise an existing one.
+The user invoked `/codesync-role-new`. This command adds (or updates) a role profile in the active project's `_roles/` directory. Roles are *definitions* shared with all peers invited to the same project via Syncthing. **Activation** of a role for a given terminal is separate — done by setting `CODESYNC_ROLE` in the shell. This command only creates the definition.
 
-Roles are *definitions* shared with all paired machines via Syncthing. **Activation** of a role for a given terminal is separate — done by setting `CODESYNC_ROLE` in the shell before launching Claude Code. This command only creates the definition.
+## Step 1 — Resolve the active project
 
-## Step 1 — Confirm contracts directory is set up
+Run:
 
-Read `~/.config/codesync/config.json` and extract `contracts_dir`. If the config file is missing or `contracts_dir` is missing/empty, STOP and tell the user to run `/install-codesync` first.
+```!
+printenv CODESYNC_PROJECT
+```
+
+If output is empty, STOP and tell the user: *"No project active in this terminal. Set CODESYNC_PROJECT in your shell first (or run /codesync-project-list to see what's registered)."*
+
+Capture the project name. Then read `~/.config/codesync/config.json` and look up `projects.<active>.path` — that's the directory the role will be written under. If the project isn't in the config, STOP and tell the user to run `/codesync-project-new` first (or to fix CODESYNC_PROJECT to a name that exists).
 
 ## Step 2 — Read any existing role profiles
 
-List the `.md` files in `<contracts_dir>/_roles/`, **ignoring `README.md`**. For each remaining file, read its full content — these are the roles already registered on this machine or synced from paired machines.
+List the `.md` files in `<project-path>/_roles/`, **ignoring `README.md`**. For each remaining file, read its full content — these are the roles already registered on this machine or synced from paired peers.
 
 Hold those profiles in mind for the conflict check in step 4. If the directory has no role files yet, there is nothing to compare against — proceed.
 
@@ -92,31 +98,33 @@ If they say *cancel*, STOP without writing anything.
 
 ## Step 6 — Write the role file
 
-Once confirmed, write the role profile to `<contracts_dir>/_roles/<role-name>.md` with the exact markdown from step 5.
+Once confirmed, write the role profile to `<project-path>/_roles/<role-name>.md` with the exact markdown from step 5.
 
 ## Step 7 — Tell the user what's next
 
 Print exactly this template (substituting the real values):
 
 ```
-✓ Role '<role-name>' registered.
+✓ Role '<role-name>' registered in project '<project-name>'.
 
-  Role profile:  <contracts_dir>/_roles/<role-name>.md
+  Role profile:  <project-path>/_roles/<role-name>.md
 
 To activate this role in a terminal, exit Claude Code and run in your shell:
 
     export CODESYNC_ROLE=<role-name>
 
-Then re-open Claude Code. /codesync-status will confirm the role is active.
+(If CODESYNC_PROJECT isn't already set, also: export CODESYNC_PROJECT=<project-name>)
 
-Each terminal can act as a different role — set CODESYNC_ROLE per shell.
-See the plugin README for a wrapper function that simplifies switching.
+Then re-open Claude Code. /codesync-status will confirm both project and role are active.
+
+Each terminal can act as a different project+role combo. See the README for
+the `cs` wrapper function that activates both in one go.
 ```
 
 ## Constraints
 
-- Never modify files outside `<contracts_dir>` (specifically `<contracts_dir>/_roles/`).
+- Never modify files outside the active project's directory (specifically `<project-path>/_roles/`).
 - Never write the role file without showing it and getting explicit confirmation.
 - If a conflict was raised and the user didn't resolve it, STOP.
 - Do not edit any plugin files from this command.
-- Do not touch `~/.config/codesync/config.json` — roles are not stored there in v0.2.0+.
+- Do not touch `~/.config/codesync/config.json` — roles aren't stored there.

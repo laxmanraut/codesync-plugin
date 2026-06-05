@@ -1,8 +1,8 @@
 # codesync
 
-A Claude Code plugin that lets two (or more) collaborators on different laptops have their Claude agents coordinate API work through a shared folder — no cloud service, no central server.
+A Claude Code plugin that lets collaborators on different laptops coordinate work through shared folders — no cloud service, no central server.
 
-Backed by [Syncthing](https://syncthing.net) for peer-to-peer folder sync. Each *machine* registers one or more role profiles (`backend`, `mobile`, `devops`, anything you want). Each *terminal* activates one of those roles via an environment variable, so the same laptop can act as different roles in different terminals.
+Backed by [Syncthing](https://syncthing.net) for peer-to-peer folder sync. The plugin organises work into **projects** (each its own Syncthing folder, with potentially different peers) and **roles** (the part you play within a project: backend, frontend, mobile, devops, whatever fits). Each terminal picks one project + role via environment variables, so the same laptop can act as different roles in different terminals — even across different projects.
 
 ## Requirements
 
@@ -21,7 +21,7 @@ In Claude Code:
 /reload-plugins
 ```
 
-The `marketplace update` and `reload-plugins` steps refresh Claude Code's local plugin cache — without them, the install can complain that the plugin isn't there.
+The `marketplace update` and `reload-plugins` steps refresh Claude Code's local plugin cache. Without them, the install can complain that the plugin isn't there.
 
 ## First-time setup
 
@@ -32,126 +32,147 @@ The `marketplace update` and `reload-plugins` steps refresh Claude Code's local 
 This will:
 
 1. Install Syncthing via Homebrew if needed and start it as a background service.
-2. Create `~/contracts/` and register it as a Syncthing folder.
-3. Print this machine's Syncthing **Device ID** — copy it; you'll share it with collaborators when pairing.
-4. Ask you to describe a role in your own words — what it does, what it doesn't do, anything else worth knowing. Claude formats your answer into a clean role profile saved to `~/contracts/_roles/<role>.md`.
-5. Print the activation line for that role:
-
+2. Save your Syncthing API key and Device ID.
+3. Ask you to register your first **project** (e.g. `lead_inbox`, `mobile-app`). Each project becomes its own Syncthing folder at `~/codesync/<project>/`.
+4. Walk you through registering your first **role** in that project — what you do, what you don't do.
+5. Print the activation command:
    ```
-   export CODESYNC_ROLE=<role-name>
+   export CODESYNC_PROJECT=<project> CODESYNC_ROLE=<role>
    ```
 
-## Activating a role in a terminal
+## Activating a project + role in a terminal
 
-Roles are **per-terminal**. Each shell decides which role this Claude Code session is acting as via the `CODESYNC_ROLE` environment variable. This lets the same laptop work as backend in one terminal and mobile in another, simultaneously.
+Both are **per-terminal**. Each shell decides which project and role this Claude Code session acts as, via two environment variables.
 
-The minimum required to activate:
+Minimum to activate manually:
 
 ```
-# In your shell, before launching Claude Code:
+export CODESYNC_PROJECT=lead_inbox
 export CODESYNC_ROLE=backend
 claude
 ```
 
-Inside Claude Code, run `/codesync-status` to confirm the role is active.
+Inside Claude Code, `/codesync-status` confirms both are set.
 
 ### A nicer wrapper for `~/.zshrc`
 
-Most people want a one-word command to switch roles. Add this to your `~/.zshrc` (or `~/.bashrc`):
+Add this to your `~/.zshrc` (or `~/.bashrc`):
 
 ```bash
 cs() {
-  if [ $# -eq 0 ]; then
-    echo "Usage: cs <role>   # e.g. cs backend"
-    [ -n "$CODESYNC_ROLE" ] && echo "Current: CODESYNC_ROLE=$CODESYNC_ROLE"
-    return 1
-  fi
-  export CODESYNC_ROLE="$1"
-  echo "Active CodeSync role for this terminal: $CODESYNC_ROLE"
+  case $# in
+    2)
+      export CODESYNC_PROJECT="$1"
+      export CODESYNC_ROLE="$2"
+      echo "CodeSync: project=$CODESYNC_PROJECT role=$CODESYNC_ROLE"
+      ;;
+    1)
+      export CODESYNC_ROLE="$1"
+      echo "CodeSync: project=${CODESYNC_PROJECT:-(unset)} role=$CODESYNC_ROLE"
+      ;;
+    0)
+      echo "Usage: cs <project> <role>   or   cs <role>"
+      echo "Current: project=${CODESYNC_PROJECT:-(unset)} role=${CODESYNC_ROLE:-(unset)}"
+      ;;
+    *)
+      echo "Usage: cs <project> <role>   or   cs <role>"
+      return 1
+      ;;
+  esac
 }
 ```
 
-After reloading your shell (`source ~/.zshrc`), switching roles per terminal becomes:
+After reloading your shell (`source ~/.zshrc`), switching becomes:
 
 ```
-$ cs backend
+$ cs lead_inbox backend
 $ claude
 > /codesync-status
-  Active role (this terminal): backend ✓
+  Active project: lead_inbox
+  Active role:    backend
+
+# In another terminal:
+$ cs mobile-app frontend
+$ claude
+> /codesync-status
+  Active project: mobile-app
+  Active role:    frontend
 ```
 
-Open a second terminal, run `cs mobile && claude`, and that session acts as `mobile` while the first stays on `backend`.
-
-## Pair two machines
-
-After each side has run `/install-codesync`, exchange Device IDs (printed by install or anytime by `/codesync-status`) and on **each side** run:
+## Adding another project
 
 ```
-/codesync-pair --peer <the-other-machine's-device-id>
+/codesync-project-new
 ```
 
-Pairing is symmetric and idempotent. Sync starts automatically once both sides have run the command. Verify with:
+Walks through naming + creates a new Syncthing folder + scaffold. After it runs, set `CODESYNC_PROJECT=<new-name>` in your shell (or use `cs <new-name> <role>`) and start `/codesync-role-new` inside the new project to register roles for it.
+
+## Pairing with a collaborator
+
+After both of you have a project of the same name (e.g. both ran `/install-codesync` with project `lead_inbox`), exchange Device IDs (printed by install or `/codesync-status`).
+
+In a terminal where `CODESYNC_PROJECT=lead_inbox` is set, run:
 
 ```
-/codesync-status
+/codesync-pair --peer <their-device-id>
 ```
 
-You should see the peer as `connected` and any role profiles synced from the other machine listed under "Known roles".
+This pairs the devices AND invites the peer to the active project's folder. Your collaborator runs the same command on their side (with their own `CODESYNC_PROJECT` set). Sync starts automatically once both sides have done it.
 
-## Where contract files go (inbox convention)
-
-`~/contracts/` has a small structure for routing:
+If you want to invite an already-paired peer to a **different** project, set `CODESYNC_PROJECT` to that project and run:
 
 ```
-~/contracts/
-├── _roles/               # role profile markdown — definitions of each role
+/codesync-project-invite --peer <their-device-id>
+```
+
+## File layout inside a project
+
+```
+~/codesync/<project>/
+├── _roles/                  # role definitions for this project
 │   ├── backend.md
 │   ├── frontend.md
 │   └── README.md
-└── _inbox/               # role-addressed content
-    ├── backend/          # things addressed TO the backend role
-    │   └── ...
-    └── frontend/         # things addressed TO the frontend role
-        └── ...
+└── _inbox/                  # role-addressed content
+    ├── backend/             # things addressed TO backend in this project
+    └── frontend/            # things addressed TO frontend in this project
 ```
 
-When you have a markdown note or contract for another role to act on, put it under `_inbox/<their-role>/`. When they reply, they put their reply under `_inbox/<your-role>/`.
+When you have content for another role, drop it under `_inbox/<their-role>/`. When they reply, they drop it under `_inbox/<your-role>/`.
 
-The post-turn auto-check honors this: with `CODESYNC_ROLE=backend` set, the hook only surfaces changes inside `_inbox/backend/` and `_roles/`. Items at the root of `~/contracts/` or in other inboxes get summarised as *"N other changes — not for this role."*
+## Post-turn auto-check
 
-If `CODESYNC_ROLE` isn't set, the hook surfaces all changes (handy for an admin terminal that wants to see everything).
+After every Claude turn, a Stop hook walks the active project's folder and surfaces anything new/changed/deleted since the last check. When `CODESYNC_ROLE` is set, it filters to only items addressed to that role (under `_inbox/<role>/`) plus role-profile changes — other changes get a one-line "N changes outside your inbox" count.
 
-## Adding more roles later
+When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 
-You're not limited to one role per machine. To register an additional role on a machine that's already set up:
-
-```
-/codesync-role-new
-```
-
-Same interactive flow as the role step inside `/install-codesync`. To see all registered roles:
-
-```
-/codesync-role-list
-```
-
-Marks which one (if any) is active in the current terminal.
-
-## Slash commands
+## Slash command reference
 
 | Command | What it does |
 |---|---|
-| `/install-codesync` | First-time setup: install Syncthing, create `~/contracts/`, register the first role for this machine. |
-| `/codesync-pair --peer <device-id>` | Pair with a peer's Syncthing device. |
-| `/codesync-status` | Read-only health check: active role for this terminal, Syncthing health, peers, folder state, all known roles. |
-| `/codesync-role-new` | Register an additional role or update an existing one. |
-| `/codesync-role-list` | List all roles registered on this machine (and synced from paired machines). |
+| `/install-codesync` | First-time setup: Syncthing, first project, first role. |
+| `/codesync-project-new` | Register an additional project. |
+| `/codesync-project-list` | List all projects on this machine; mark the active one. |
+| `/codesync-project-invite --peer <id>` | Invite an existing peer to the active project. |
+| `/codesync-pair --peer <id>` | Pair a brand-new peer at the device level and invite them to the active project in one step. |
+| `/codesync-role-new` | Register a role in the active project (or update an existing one). |
+| `/codesync-role-list` | List roles in the active project; mark the active one. |
+| `/codesync-status` | Active project + role, Syncthing health, peers attached to the active project, folder sync state, registered roles. |
 
-## What's in here
+All commands except `/install-codesync` and `/codesync-project-new` require `CODESYNC_PROJECT` to be set in the terminal.
 
-- `codesync/` — the plugin itself (manifest, commands, scripts).
-- `.claude-plugin/marketplace.json` — the marketplace index that lets Claude Code install the plugin from this repo.
+## Migration from earlier versions
+
+If you installed v0.4.x (single `~/contracts/` folder, no projects), `/install-codesync` in v0.5.0 will run a one-time migration that:
+
+- Asks for a name for your existing collaboration (default: `lead_inbox`).
+- Moves `~/contracts/` → `~/codesync/<name>/`.
+- Updates Syncthing to point at the new path (folder ID stays the same so sync survives).
+- Rewrites `~/.config/codesync/config.json` to the new schema, preserving your API key and Device ID.
+- Backs up the old config to `~/.config/codesync/config.json.v0.4.bak`.
+
+Your collaborator runs the same migration when they update. Both of you pick the same project name so it lines up.
 
 ## What's coming
 
-A future slice will add `/request-api`, `/check-contracts`, `/fulfill-api` for the actual contract workflow on top of this synced foundation. The contract commands will read `CODESYNC_ROLE` to decide which contracts the current terminal should act on.
+A structured-thread format with YAML frontmatter on contract files (so the auto-check can also route by explicit metadata like `to: backend`, not just by inbox path). Plus CWD auto-detection of the active project (so `cd ~/code/lead_inbox` auto-sets `CODESYNC_PROJECT` for that terminal).
