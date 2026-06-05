@@ -21,7 +21,7 @@ import json, os, sys
 try:
     lib_dir, cfg_path, active_project, active_role = sys.argv[1:5]
     sys.path.insert(0, lib_dir)
-    from frontmatter import read_frontmatter_from_file
+    from frontmatter import read_frontmatter_from_file  # noqa: E402
 
     # No project active in this terminal → silent
     if not active_project:

@@ -177,6 +177,7 @@ Roles aren't restricted to one status convention — same `to`-role can receive 
 | `/codesync-thread-new` | Interactive — asks who the thread is for, what status, what title, what body. Writes the file with frontmatter into the right inbox. |
 | `/codesync-thread-list` | Lists threads in the active role's inbox, with status + title + sender + age. `--all` shows every role's inbox. `--status <s>` filters by status. |
 | `/codesync-thread-reply <slug>` | Creates a reply file addressed back to the original thread's sender, with `replies-to` set automatically. |
+| `/codesync-thread-set-status <slug> <status>` | Moves a thread between `todo` / `wip` / `done` / `blocked` / `note` without opening the file. Atomic rewrite of the status field only. |
 
 ### Auto-check enrichment
 
