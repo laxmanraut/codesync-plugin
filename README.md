@@ -207,6 +207,28 @@ When the post-turn Stop hook surfaces a new/changed thread file, it reads the fr
 
 Files without frontmatter (free-form markdown you write by hand) still surface, just without the status/title prefix.
 
+## Status-line indicator (optional)
+
+CodeSync can also surface unread-inbox counts in Claude Code's bottom **status line** — the same strip that shows things like "Remote Control active". When something new arrives in your inbox since the last Claude turn, you'll see:
+
+```
+codesync ▴ 3 new
+```
+
+next to whatever else is on your status line (netmeter, etc.). When the count is zero, codesync stays silent — no real estate used. The indicator is **per-terminal**: each Claude Code session shows the count for its active project + role.
+
+### One-time install
+
+```
+/codesync-statusline-setup
+```
+
+That safely adds codesync to your `~/.claude/settings.json` statusLine. It backs up the file first, captures any existing statusLine command, and wraps both so they compose cleanly. The change is non-destructive — your existing setup (netmeter, etc.) keeps working.
+
+To remove it later: `/codesync-statusline-teardown` — restores the prior statusLine command (or removes the entry entirely if there was none).
+
+The status line refreshes every few seconds; after install the indicator appears at the bottom of your Claude Code window shortly. Sending any message forces an immediate refresh.
+
 ## Session-start summary
 
 When you launch Claude Code in a terminal with `CODESYNC_PROJECT` (and `CODESYNC_ROLE`) set, the plugin's SessionStart hook surfaces what's waiting in your inbox before you type anything:
@@ -267,6 +289,8 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 | `/codesync-thread-set-status <slug> <status>` | Move a thread between `todo` / `wip` / `done` / `blocked` / `note` without hand-editing. |
 | `/codesync-thread-archive <slug>` | Move a thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved, just out of default views. |
 | `/codesync-thread-unarchive <slug>` | Reverse of archive — bring an archived thread back into the active inbox. |
+| `/codesync-statusline-setup` | Install codesync's status-line segment (shows `codesync ▴ N new` in Claude Code's bottom bar when there are unread items). Backs up settings.json. |
+| `/codesync-statusline-teardown` | Remove codesync's status-line segment; restore prior statusLine. |
 | `/codesync-status` | Active project + role, Syncthing health, peers attached to the active project, folder sync state, registered roles. |
 
 All commands except `/install-codesync` and `/codesync-project-new` require `CODESYNC_PROJECT` to be set in the terminal.
