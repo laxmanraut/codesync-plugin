@@ -189,6 +189,26 @@ When the post-turn Stop hook surfaces a new/changed thread file, it reads the fr
 
 Files without frontmatter (free-form markdown you write by hand) still surface, just without the status/title prefix.
 
+## Session-start summary
+
+When you launch Claude Code in a terminal with `CODESYNC_PROJECT` (and `CODESYNC_ROLE`) set, the plugin's SessionStart hook surfaces what's waiting in your inbox before you type anything:
+
+```
+[codesync] Project: lead_inbox  Role: backend
+  Inbox: 3 todo, 1 wip, 2 notes
+
+    [todo]     Migrate to JSON Patch for partial updates (from frontend, 2d ago)
+    [wip]      Lead inbox PR 3a (from backend, 5h ago)
+    [todo]     Refactor pagination (from frontend, 3d ago)
+    [note]     Auth v2 ready to wire (from backend, 1d ago)
+    [note]     Feature-flag rollout plan (from devops, 6h ago)
+    …and 2 more
+
+  Run /codesync-thread-list to see them, or /codesync-thread-reply <slug> to respond.
+```
+
+When the inbox is empty, the hook stays silent. When `CODESYNC_PROJECT` is unset, it stays silent (matches Stop hook's fail-open posture). When project is set but role isn't, it nudges you to set the role.
+
 ## Post-turn auto-check
 
 After every Claude turn, a Stop hook walks the active project's folder and surfaces anything new/changed/deleted since the last check. When `CODESYNC_ROLE` is set, it filters to only items addressed to that role (under `_inbox/<role>/`) plus role-profile changes — other changes get a one-line "N changes outside your inbox" count.
