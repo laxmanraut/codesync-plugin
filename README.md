@@ -142,6 +142,36 @@ If you want to invite an already-paired peer to a **different** project, set `CO
 /codesync-project-invite --peer <their-device-id>
 ```
 
+### Teams of 3+ — use an introducer
+
+Pairing two people is straightforward — each side runs `/codesync-pair` once and you're done. But with N people, the naive approach needs each person to pair with every other person: that's N×(N−1)/2 pairings, plus everyone has to swap Device IDs with everyone.
+
+CodeSync uses Syncthing's **introducer** model to collapse this. Designate one trusted peer as the introducer (often the person who set the project up). Everyone else pairs *with the introducer* and passes `--as-introducer`:
+
+```
+/codesync-pair --peer <introducer-device-id> --as-introducer
+```
+
+Syncthing then automatically tells your machine about every other peer the introducer is connected to in the shared folder — you don't have to pair with them by hand. Total pairings drop from N×(N−1)/2 to roughly N.
+
+**Workflow for a 3-person team (Alice = introducer, Bob and Carol join):**
+
+1. Alice and Bob pair normally: each runs `/codesync-pair --peer <other>` once.
+2. Carol joins. She gets Alice's Device ID and runs:
+   ```
+   /codesync-pair --peer <alice-device-id> --as-introducer
+   ```
+   Alice runs the same on her side with Carol's ID, also with `--as-introducer` (so the introduction is mutual).
+3. Bob's machine learns about Carol automatically through Alice — no Bob↔Carol pairing needed.
+
+**When to use it:**
+- 2 people total → don't bother, just pair directly.
+- 3+ people → pick one introducer, everyone else `--as-introducer`s through them.
+
+**Trust trade-off:** an introducer can add new devices to your Syncthing instance. Only mark someone as introducer if you'd be okay with them telling your machine about a new teammate. For most small teams that's fine; for adversarial settings, pair manually.
+
+If you already paired someone normally and want to upgrade them to introducer, just rerun the pair command with `--as-introducer` — it's idempotent.
+
 ## File layout inside a project
 
 ```
@@ -278,9 +308,9 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 | `/install-codesync` | First-time setup: Syncthing, first project, first role. |
 | `/codesync-project-new` | Register an additional project. |
 | `/codesync-project-list` | List all projects on this machine; mark the active one. |
-| `/codesync-project-invite --peer <id>` | Invite an existing peer to the active project. |
+| `/codesync-project-invite --peer <id> [--as-introducer]` | Invite an existing peer to the active project. Pass `--as-introducer` to let them introduce other peers automatically (3+ user teams). |
 | `/codesync-project-attach <project> [<role>]` | Drop a `.codesync/project.json` marker in the current dir so terminals launched here auto-resolve the project. |
-| `/codesync-pair --peer <id>` | Pair a brand-new peer at the device level and invite them to the active project in one step. |
+| `/codesync-pair --peer <id> [--as-introducer]` | Pair a brand-new peer at the device level and invite them to the active project in one step. Pass `--as-introducer` for the introducer pattern (see "Teams of 3+" above). |
 | `/codesync-role-new` | Register a role in the active project (or update an existing one). |
 | `/codesync-role-list` | List roles in the active project; mark the active one. |
 | `/codesync-thread-new` | Start a new thread (note / task / decision / question) addressed to another role. |

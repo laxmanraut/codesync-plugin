@@ -23,6 +23,7 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 # 1. Args
 PEER_ID=""
+AS_INTRODUCER="no"
 while [ $# -gt 0 ]; do
   case "$1" in
     --peer)
@@ -30,12 +31,16 @@ while [ $# -gt 0 ]; do
       PEER_ID="$2"
       shift 2
       ;;
+    --as-introducer)
+      AS_INTRODUCER="yes"
+      shift
+      ;;
     *)
       shift
       ;;
   esac
 done
-[ -n "$PEER_ID" ] || err "Usage: pair-peer.sh --peer <peer-device-id>"
+[ -n "$PEER_ID" ] || err "Usage: pair-peer.sh --peer <peer-device-id> [--as-introducer]"
 
 # 2. Load machine-level config
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
@@ -53,17 +58,27 @@ api() { curl -sf -H "X-API-Key: $API_KEY" "$@"; }
 api "$API/rest/system/status" >/dev/null \
   || err "Syncthing REST API at $API is not responding. Try: brew services restart syncthing"
 
-# 4. Add peer to known devices (idempotent)
+# 4. Add peer to known devices (idempotent; PUT replaces).
+#    Read existing device first so we don't clobber the introducer flag if it
+#    was set by an earlier call. --as-introducer always upgrades to true.
 SHORT_NAME="codesync-peer-${PEER_ID:0:7}"
 log "Adding peer to Syncthing's known devices as '$SHORT_NAME'..."
-DEVICE_PAYLOAD=$(python3 - "$PEER_ID" "$SHORT_NAME" <<'PY'
+EXISTING_DEVICE=$(api "$API/rest/config/devices/$PEER_ID" 2>/dev/null || echo "")
+DEVICE_PAYLOAD=$(python3 - "$PEER_ID" "$SHORT_NAME" "$AS_INTRODUCER" "$EXISTING_DEVICE" <<'PY'
 import json, sys
+peer, name, asintro, existing = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+introducer = asintro == "yes"
+if not introducer and existing:
+    try:
+        introducer = bool(json.loads(existing).get("introducer", False))
+    except Exception:
+        introducer = False
 print(json.dumps({
-    "deviceID":          sys.argv[1],
-    "name":              sys.argv[2],
+    "deviceID":          peer,
+    "name":              name,
     "addresses":         ["dynamic"],
     "compression":       "metadata",
-    "introducer":        False,
+    "introducer":        introducer,
     "autoAcceptFolders": False,
 }))
 PY
@@ -85,7 +100,9 @@ print("yes" if sys.argv[2] in projects else "no")
 
   if [ "$PROJECT_FOUND" = "yes" ]; then
     log "Inviting peer to active project '$PROJECT'..."
-    if bash "$SCRIPT_DIR/invite-peer-to-project.sh" --peer "$PEER_ID" --project "$PROJECT" >/dev/null 2>&1; then
+    INVITE_ARGS=(--peer "$PEER_ID" --project "$PROJECT")
+    [ "$AS_INTRODUCER" = "yes" ] && INVITE_ARGS+=(--as-introducer)
+    if bash "$SCRIPT_DIR/invite-peer-to-project.sh" "${INVITE_ARGS[@]}" >/dev/null 2>&1; then
       INVITED_TO="$PROJECT"
     else
       log "WARNING: device pair succeeded but project invite failed. Run /codesync-project-invite --peer $PEER_ID manually."
@@ -100,3 +117,4 @@ printf '\n'
 printf 'PAIRED_WITH=%s\n' "$PEER_ID"
 printf 'PEER_SHORT_NAME=%s\n' "$SHORT_NAME"
 printf 'INVITED_TO=%s\n' "$INVITED_TO"
+printf 'AS_INTRODUCER=%s\n' "$AS_INTRODUCER"
