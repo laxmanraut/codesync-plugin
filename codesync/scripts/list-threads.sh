@@ -29,10 +29,15 @@ ROLE="${CODESYNC_ROLE:-}"
 
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-python3 - "$CFG_FILE" "$PROJECT" "$ROLE" "$FILTER_STATUS" "$ALL_INBOXES" <<'PY'
-import json, os, re, sys, time
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-cfg_path, project, role, filter_status, all_inboxes = sys.argv[1:6]
+python3 - "$SCRIPT_DIR/lib" "$CFG_FILE" "$PROJECT" "$ROLE" "$FILTER_STATUS" "$ALL_INBOXES" <<'PY'
+import json, os, sys, time
+
+lib_dir, cfg_path, project, role, filter_status, all_inboxes = sys.argv[1:7]
+sys.path.insert(0, lib_dir)
+from frontmatter import read_frontmatter_from_file
+
 all_inboxes = (all_inboxes == "yes")
 
 with open(cfg_path) as f:
@@ -63,32 +68,6 @@ elif role:
 else:
     sys.exit("CODESYNC_ROLE not set and --all-inboxes not given. Set CODESYNC_ROLE or pass --all-inboxes.")
 
-# Frontmatter parser — very minimal, only the keys we care about
-FM_RE = re.compile(r'\A---\s*\n(.*?)\n---\s*\n', re.DOTALL)
-def parse_frontmatter(text):
-    m = FM_RE.match(text)
-    if not m:
-        return None
-    block = m.group(1)
-    in_cs = False
-    fm = {}
-    for line in block.splitlines():
-        stripped = line.rstrip()
-        if stripped == "":
-            continue  # blank lines don't terminate the codesync block
-        if stripped == "codesync:":
-            in_cs = True
-            continue
-        if in_cs and stripped.startswith("  "):
-            kv = stripped[2:]
-            if ":" in kv:
-                k, v = kv.split(":", 1)
-                v = v.strip().strip('"').strip("'")
-                fm[k.strip()] = v
-        else:
-            in_cs = False
-    return fm
-
 def short_age(ts):
     try:
         age = time.time() - ts
@@ -107,12 +86,7 @@ for d in inbox_dirs:
         if not fn.endswith(".md"):
             continue
         path = os.path.join(d, fn)
-        try:
-            with open(path) as f:
-                head = f.read(4096)
-        except OSError:
-            continue
-        fm = parse_frontmatter(head) or {}
+        fm = read_frontmatter_from_file(path) or {}
         if filter_status and fm.get("status", "") != filter_status:
             continue
         try:

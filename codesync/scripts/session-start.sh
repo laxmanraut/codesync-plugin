@@ -12,15 +12,18 @@
 # - Silent on errors.
 
 CFG_FILE="$HOME/.config/codesync/config.json"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 [ -f "$CFG_FILE" ] || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0
 
-python3 - "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" <<'PY' 2>/dev/null
-import json, os, re, sys, time
+python3 - "$SCRIPT_DIR/lib" "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" <<'PY' 2>/dev/null
+import json, os, sys, time
 
 try:
-    cfg_path, active_project, active_role = sys.argv[1:4]
+    lib_dir, cfg_path, active_project, active_role = sys.argv[1:5]
+    sys.path.insert(0, lib_dir)
+    from frontmatter import read_frontmatter_from_file
 
     # No project active in this terminal → silent
     if not active_project:
@@ -50,35 +53,6 @@ try:
         # Inbox dir doesn't exist yet — silent
         sys.exit(0)
 
-    # Frontmatter parser — same logic as list-threads.sh / stop-check.sh
-    FM_RE = re.compile(r'\A---\s*\n(.*?)\n---', re.DOTALL)
-    def parse_fm(path):
-        try:
-            with open(path) as f:
-                head = f.read(4096)
-        except OSError:
-            return None
-        m = FM_RE.match(head)
-        if not m:
-            return None
-        in_cs = False
-        fm = {}
-        for line in m.group(1).splitlines():
-            stripped = line.rstrip()
-            if stripped == "":
-                continue
-            if stripped == "codesync:":
-                in_cs = True
-                continue
-            if in_cs and stripped.startswith("  "):
-                kv = stripped[2:]
-                if ":" in kv:
-                    k, v = kv.split(":", 1)
-                    fm[k.strip()] = v.strip().strip('"').strip("'")
-            else:
-                in_cs = False
-        return fm if fm else None
-
     def short_age(ts):
         try:
             age = time.time() - ts
@@ -95,7 +69,7 @@ try:
         if not fn.endswith(".md") or fn == "README.md":
             continue
         full = os.path.join(inbox_path, fn)
-        fm = parse_fm(full) or {}
+        fm = read_frontmatter_from_file(full) or {}
         try:
             mtime = os.path.getmtime(full)
         except OSError:

@@ -9,16 +9,19 @@
 # - Role-filters when CODESYNC_ROLE is set: only surfaces _inbox/<role>/ + _roles/.
 
 CFG_FILE="$HOME/.config/codesync/config.json"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Silent no-ops if plugin isn't installed or python3 missing
 [ -f "$CFG_FILE" ] || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0
 
-python3 - "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" <<'PY' 2>/dev/null
+python3 - "$SCRIPT_DIR/lib" "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" <<'PY' 2>/dev/null
 import json, os, sys
 
 try:
-    cfg_path, active_project, active_role = sys.argv[1:4]
+    lib_dir, cfg_path, active_project, active_role = sys.argv[1:5]
+    sys.path.insert(0, lib_dir)
+    from frontmatter import read_frontmatter_from_file
 
     # No project active in this terminal → silent
     if not active_project:
@@ -30,14 +33,12 @@ try:
     projects = cfg.get("projects", {})
     project = projects.get(active_project)
     if not project:
-        # CODESYNC_PROJECT set but unknown — silent (slash commands will tell user)
         sys.exit(0)
 
     proj_path = project.get("path", "")
     if not proj_path or not os.path.isdir(proj_path):
         sys.exit(0)
 
-    # Per-project baseline file
     baseline_path = os.path.expanduser(
         f"~/.config/codesync/baseline-{active_project}.json"
     )
@@ -77,7 +78,6 @@ try:
     changed   = [p for p in current if p in baseline and current[p] > baseline[p]]
     deleted   = [p for p in baseline if p not in current]
 
-    # Role-based filtering
     if active_role:
         prefix = f"_inbox/{active_role}/"
         def relevant(p):
@@ -89,38 +89,8 @@ try:
     else:
         suppressed = 0
 
-    # Read frontmatter for new/changed files to enrich the display.
-    # Deletions can't be enriched (file is gone).
-    import re
-    FM_RE = re.compile(r'\A---\s*\n(.*?)\n---', re.DOTALL)
-    def parse_fm(path):
-        try:
-            with open(path) as f:
-                head = f.read(4096)
-            m = FM_RE.match(head)
-            if not m:
-                return None
-            in_cs = False
-            fm = {}
-            for line in m.group(1).splitlines():
-                if line.strip() == "":
-                    continue  # blank lines don't terminate the codesync block
-                if line.strip() == "codesync:":
-                    in_cs = True; continue
-                if in_cs and line.startswith("  "):
-                    kv = line[2:]
-                    if ":" in kv:
-                        k, v = kv.split(":", 1)
-                        fm[k.strip()] = v.strip().strip('"').strip("'")
-                else:
-                    in_cs = False
-            return fm if fm else None
-        except OSError:
-            return None
-
     def label(p):
-        full = os.path.join(proj_path, p)
-        fm = parse_fm(full)
+        fm = read_frontmatter_from_file(os.path.join(proj_path, p))
         if not fm:
             return p
         status = fm.get("status", "")
@@ -135,7 +105,7 @@ try:
 
     items  = [f"+ {label(p)}" for p in sorted(new_files)]
     items += [f"~ {label(p)}" for p in sorted(changed)]
-    items += [f"- {p}" for p in sorted(deleted)]  # deleted: file gone, no frontmatter to read
+    items += [f"- {p}" for p in sorted(deleted)]
 
     if not items and suppressed == 0:
         sys.exit(0)
@@ -151,8 +121,7 @@ try:
             print(f"  …and {len(items) - 10} more")
         if suppressed and active_role:
             print(f"  ({suppressed} other change(s) outside _inbox/{active_role}/ — not for this role)")
-    # else: silent when nothing for us
 
 except Exception:
-    pass  # never crash the user's session
+    pass
 PY

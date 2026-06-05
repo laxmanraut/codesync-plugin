@@ -229,6 +229,7 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 | `/codesync-thread-new` | Start a new thread (note / task / decision / question) addressed to another role. |
 | `/codesync-thread-list` | List threads in your role's inbox (or all inboxes with `--all`); filter by status. |
 | `/codesync-thread-reply <slug>` | Reply to an existing thread; auto-addresses the reply back to the original sender. |
+| `/codesync-thread-set-status <slug> <status>` | Move a thread between `todo` / `wip` / `done` / `blocked` / `note` without hand-editing. |
 | `/codesync-status` | Active project + role, Syncthing health, peers attached to the active project, folder sync state, registered roles. |
 
 All commands except `/install-codesync` and `/codesync-project-new` require `CODESYNC_PROJECT` to be set in the terminal.
@@ -249,4 +250,4 @@ Your collaborator runs the same migration when they update. Both of you pick the
 
 CWD auto-detection — so `cd ~/code/lead_inbox` automatically activates that project for the terminal (via a `.codesync/project.yaml` marker file the plugin walks up the directory tree to find), without having to `export CODESYNC_PROJECT=` manually each shell. Env var override stays for power users.
 
-Possibly: a `/codesync-thread-set-status <slug> <status>` to move a task through `todo → wip → done` without re-opening the file. And a `/codesync-thread-archive` that moves resolved threads out of the active inbox into `_archive/`.
+Possibly: a `/codesync-thread-archive` that moves resolved threads out of the active inbox into an `_archive/` subdirectory so the inbox listing stays focused on what's active.
