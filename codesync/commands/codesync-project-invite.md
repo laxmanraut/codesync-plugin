@@ -8,7 +8,7 @@ allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/invite-peer-to-project.sh:*)
 
 The user invoked `/codesync-project-invite $ARGUMENTS`. This adds a peer's Syncthing device to the active project's folder so that project's content syncs with them. It does NOT add them to *other* projects on this machine.
 
-Pass `--as-introducer` if the peer should act as a Syncthing introducer for this team — they will introduce other peers they're paired with to you automatically. Most useful for teams of 3+; see `/codesync-pair` docs for the trust trade-off. Omitting the flag does NOT downgrade a peer who was already marked as an introducer by `/codesync-pair`.
+Pass `--as-introducer` if you want this peer to act as an introducer **on your side** — Syncthing will then auto-add other teammates this peer is connected to in this project's folder. The flag is one-way: you mark the introducer in your own config; they don't reciprocate. Most useful for teams of 3+; see `/codesync-pair` for the full explanation and trust trade-off. Omitting the flag does NOT downgrade a peer who was previously marked as an introducer.
 
 ## Step 1 — Confirm a project is active
 
@@ -32,10 +32,18 @@ Also check whether the user passed the optional `--as-introducer` flag — if pr
 
 ## Step 3 — Run the invite script
 
-Substitute `<PROJECT>` (from step 1) and `<PEER_ID>` (from step 2). Append `--as-introducer` only if the user passed it.
+Substitute `<PROJECT>` (from step 1) and `<PEER_ID>` (from step 2). Pick ONE of the two invocations below — with or without `--as-introducer` — based on whether the user passed it in `$ARGUMENTS`. Do NOT include square brackets in the command you actually run.
+
+Without `--as-introducer`:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/invite-peer-to-project.sh" --peer "<PEER_ID>" --project "<PROJECT>" [--as-introducer]
+"${CLAUDE_PLUGIN_ROOT}/scripts/invite-peer-to-project.sh" --peer "<PEER_ID>" --project "<PROJECT>"
+```
+
+With `--as-introducer` (only if the user passed it):
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/invite-peer-to-project.sh" --peer "<PEER_ID>" --project "<PROJECT>" --as-introducer
 ```
 
 The script prints:

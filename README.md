@@ -154,23 +154,29 @@ CodeSync uses Syncthing's **introducer** model to collapse this. Designate one t
 
 Syncthing then automatically tells your machine about every other peer the introducer is connected to in the shared folder — you don't have to pair with them by hand. Total pairings drop from N×(N−1)/2 to roughly N.
 
+**The flag is one-way and set on YOUR side.** When you pass `--as-introducer`, you are saying "*my* machine trusts this peer to introduce other teammates to *me*." The introducer themselves doesn't run `--as-introducer` — they just pair normally. Per Syncthing's own guidance, two peers should NOT mark each other as introducers; the relationship is intentionally directional.
+
 **Workflow for a 3-person team (Alice = introducer, Bob and Carol join):**
 
-1. Alice and Bob pair normally: each runs `/codesync-pair --peer <other>` once.
-2. Carol joins. She gets Alice's Device ID and runs:
+1. Bob pairs with Alice using `--as-introducer`:
    ```
    /codesync-pair --peer <alice-device-id> --as-introducer
    ```
-   Alice runs the same on her side with Carol's ID, also with `--as-introducer` (so the introduction is mutual).
-3. Bob's machine learns about Carol automatically through Alice — no Bob↔Carol pairing needed.
+   Alice pairs back with Bob normally (no `--as-introducer` on Alice's side — she's the introducer, not the introduced).
+2. Carol joins later. She runs the same as Bob did:
+   ```
+   /codesync-pair --peer <alice-device-id> --as-introducer
+   ```
+   Alice pairs back with Carol normally.
+3. Bob's machine now learns about Carol automatically through Alice — no Bob↔Carol pairing needed. Carol's machine likewise learns about Bob through Alice. Same for every future teammate Alice adds.
 
 **When to use it:**
 - 2 people total → don't bother, just pair directly.
-- 3+ people → pick one introducer, everyone else `--as-introducer`s through them.
+- 3+ people → pick one introducer; everyone else `--as-introducer`s through them. The introducer themselves does nothing special — they pair normally with each new teammate.
 
 **Trust trade-off:** an introducer can add new devices to your Syncthing instance. Only mark someone as introducer if you'd be okay with them telling your machine about a new teammate. For most small teams that's fine; for adversarial settings, pair manually.
 
-If you already paired someone normally and want to upgrade them to introducer, just rerun the pair command with `--as-introducer` — it's idempotent.
+If you already paired with the introducer normally and want to upgrade, just rerun the pair command with `--as-introducer` — it's idempotent and only ever upgrades the flag, never downgrades.
 
 ## File layout inside a project
 

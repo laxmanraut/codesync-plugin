@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # invite-peer-to-project.sh — Add a peer to one specific project's Syncthing folder.
-# Args: --peer <device-id> --project <project-name>
+# Args: --peer <device-id> --project <project-name> [--as-introducer]
 #
 # Idempotent. Adds the peer to known devices if not already there, then adds
 # the peer to the project's folder devices list. Refuses to invite own device.
+# Optional --as-introducer marks the peer as an introducer on THIS machine
+# (Syncthing's flag is one-way; the introducer doesn't reciprocate). Never
+# silently downgrades an existing introducer=true flag.
 
 set -euo pipefail
 

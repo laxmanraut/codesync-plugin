@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # pair-peer.sh — Device-level pairing with a peer.
-# Args: --peer <device-id>
+# Args: --peer <device-id> [--as-introducer]
 #
 # Adds the peer to Syncthing's known devices. If $CODESYNC_PROJECT is set
 # and refers to a registered project, ALSO invites the peer to that
 # project's folder (this is the "first pair + active-project invite" UX
-# from v0.5.0 design pick 4-B).
+# from v0.5.0 design pick 4-B). The optional --as-introducer flag marks
+# this peer as an introducer ON THIS MACHINE — Syncthing's flag is one-way
+# and set on the receiver's side.
 #
-# Idempotent. Refuses to pair with own device.
+# Idempotent. Refuses to pair with own device. Never silently downgrades
+# an existing introducer=true flag (re-pair without --as-introducer is a
+# no-op for the introducer field).
 
 set -euo pipefail
 

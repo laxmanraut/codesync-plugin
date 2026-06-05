@@ -15,11 +15,13 @@ If you want to invite an already-paired peer to an additional project, use `/cod
 
 ## When to use `--as-introducer`
 
-For teams of 3+ people, designate one peer as the **introducer** on each side. When you pair with an introducer using `--as-introducer`, Syncthing will automatically learn about every other peer the introducer is connected to — you don't have to pair with each teammate manually. This collapses N×(N−1) pairings down to roughly N.
+For teams of 3+ people, designate one peer as the **introducer**. When you pair with that peer using `--as-introducer`, Syncthing will automatically learn about every other peer they're already connected to — you don't have to pair with each teammate manually. This collapses N×(N−1)/2 pairings down to roughly N.
+
+The flag is **one-way and set on YOUR side**. You say `--as-introducer` to declare *"my machine trusts this peer to introduce other teammates to me."* The introducer themselves pairs back normally — they do NOT run `--as-introducer` against you. Per Syncthing's guidance, two peers should not mark each other as introducers.
 
 Rule of thumb:
 - 2 people: don't bother — just pair the two of you directly.
-- 3+ people: pick one trusted peer (often the person who set the project up) as the introducer; everyone else pairs with that peer using `--as-introducer`.
+- 3+ people: pick one trusted peer (often the person who set the project up) as the introducer; everyone else pairs with that peer using `--as-introducer`. The introducer doesn't run anything special — they just pair normally with each new teammate.
 
 Only set `--as-introducer` on someone you trust to route the team; an introducer can add new devices to your Syncthing instance.
 
