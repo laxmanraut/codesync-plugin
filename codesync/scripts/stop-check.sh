@@ -63,21 +63,46 @@ try:
     changed   = [p for p in current if p in baseline and current[p] > baseline[p]]
     deleted   = [p for p in baseline if p not in current]
 
+    # Role-based filtering: when CODESYNC_ROLE is set, only surface paths under
+    # _inbox/<role>/ and _roles/. When unset, surface everything (today's behaviour).
+    # Files outside the role's inbox are still tracked in the baseline so they
+    # don't re-surface when the role is unset later.
+    if active_role:
+        prefix_inbox = f"_inbox/{active_role}/"
+        def relevant(p):
+            return p.startswith(prefix_inbox) or p.startswith("_roles/")
+        suppressed_count = (
+            sum(1 for p in new_files if not relevant(p))
+            + sum(1 for p in changed if not relevant(p))
+            + sum(1 for p in deleted if not relevant(p))
+        )
+        new_files = [p for p in new_files if relevant(p)]
+        changed   = [p for p in changed   if relevant(p)]
+        deleted   = [p for p in deleted   if relevant(p)]
+    else:
+        suppressed_count = 0
+
     items = []
     items += [f"+ {p}" for p in sorted(new_files)]
     items += [f"~ {p}" for p in sorted(changed)]
     items += [f"- {p}" for p in sorted(deleted)]
 
-    if not items:
+    if not items and suppressed_count == 0:
         sys.exit(0)
 
     role_label = f"role={active_role}" if active_role else "no role active in this terminal"
-    print()
-    print(f"[codesync] {len(items)} change(s) in the shared contracts folder ({role_label}):")
-    for line in items[:10]:
-        print(f"  {line}")
-    if len(items) > 10:
-        print(f"  …and {len(items) - 10} more")
+    if items:
+        print()
+        print(f"[codesync] {len(items)} change(s) for you in the shared contracts folder ({role_label}):")
+        for line in items[:10]:
+            print(f"  {line}")
+        if len(items) > 10:
+            print(f"  …and {len(items) - 10} more")
+        if suppressed_count:
+            print(f"  ({suppressed_count} other change(s) outside _inbox/{active_role}/ — not for this role)")
+    elif suppressed_count:
+        # Silent unless we want a heartbeat; for now stay quiet when nothing is for us.
+        sys.exit(0)
 except Exception:
     pass  # never let the hook crash the user's session
 PY

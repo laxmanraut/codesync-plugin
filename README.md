@@ -98,6 +98,29 @@ Pairing is symmetric and idempotent. Sync starts automatically once both sides h
 
 You should see the peer as `connected` and any role profiles synced from the other machine listed under "Known roles".
 
+## Where contract files go (inbox convention)
+
+`~/contracts/` has a small structure for routing:
+
+```
+~/contracts/
+├── _roles/               # role profile markdown — definitions of each role
+│   ├── backend.md
+│   ├── frontend.md
+│   └── README.md
+└── _inbox/               # role-addressed content
+    ├── backend/          # things addressed TO the backend role
+    │   └── ...
+    └── frontend/         # things addressed TO the frontend role
+        └── ...
+```
+
+When you have a markdown note or contract for another role to act on, put it under `_inbox/<their-role>/`. When they reply, they put their reply under `_inbox/<your-role>/`.
+
+The post-turn auto-check honors this: with `CODESYNC_ROLE=backend` set, the hook only surfaces changes inside `_inbox/backend/` and `_roles/`. Items at the root of `~/contracts/` or in other inboxes get summarised as *"N other changes — not for this role."*
+
+If `CODESYNC_ROLE` isn't set, the hook surfaces all changes (handy for an admin terminal that wants to see everything).
+
 ## Adding more roles later
 
 You're not limited to one role per machine. To register an additional role on a machine that's already set up:
