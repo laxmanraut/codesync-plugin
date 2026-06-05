@@ -82,9 +82,12 @@ try:
     deleted   = [p for p in baseline if p not in current]
 
     if active_role:
-        prefix = f"_inbox/{active_role}/"
+        inbox_prefix   = f"_inbox/{active_role}/"
+        archive_prefix = f"_archive/{active_role}/"
         def relevant(p):
-            return p.startswith(prefix) or p.startswith("_roles/")
+            return (p.startswith(inbox_prefix)
+                    or p.startswith(archive_prefix)
+                    or p.startswith("_roles/"))
         suppressed = sum(1 for ps in (new_files, changed, deleted) for p in ps if not relevant(p))
         new_files = [p for p in new_files if relevant(p)]
         changed   = [p for p in changed   if relevant(p)]
@@ -93,16 +96,18 @@ try:
         suppressed = 0
 
     def label(p):
+        is_archive = p.startswith("_archive/")
         fm = read_frontmatter_from_file(os.path.join(proj_path, p))
         if not fm:
-            return p
+            return f"[archived] {p}" if is_archive else p
         status = fm.get("status", "")
         title  = fm.get("title", "")
         frm    = fm.get("from", "")
         parts = []
-        if status: parts.append(f"[{status}]")
-        if title:  parts.append(title)
-        if frm:    parts.append(f"(from {frm})")
+        if is_archive: parts.append("[archived]")
+        if status:     parts.append(f"[{status}]")
+        if title:      parts.append(title)
+        if frm:        parts.append(f"(from {frm})")
         prefix = " ".join(parts) if parts else ""
         return f"{prefix}  {p}" if prefix else p
 

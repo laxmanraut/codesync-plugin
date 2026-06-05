@@ -225,6 +225,22 @@ When you launch Claude Code in a terminal with `CODESYNC_PROJECT` (and `CODESYNC
 
 When the inbox is empty, the hook stays silent. When `CODESYNC_PROJECT` is unset, it stays silent (matches Stop hook's fail-open posture). When project is set but role isn't, it nudges you to set the role.
 
+## Archiving resolved threads
+
+As threads accumulate, you'll want to move resolved/stale ones out of the active inbox without deleting them. Use `/codesync-thread-archive <slug>` — it moves the file from `_inbox/<role>/<slug>.md` to `_archive/<role>/<slug>.md`. The file is preserved with its frontmatter and body intact; it just stops appearing in `/codesync-thread-list`'s default view.
+
+```
+~/codesync/lead_inbox/
+├── _inbox/<role>/        ← active work, surfaced everywhere
+└── _archive/<role>/      ← preserved history, hidden by default
+```
+
+To see archived items: `/codesync-thread-list --archive` (only archive) or `/codesync-thread-list --include-archive` (both, with `[archived]` label on archived rows). To bring something back: `/codesync-thread-unarchive <slug>`.
+
+Status (`todo`/`wip`/`done`/`blocked`/`note`) and archive are **orthogonal**: a `done` thread can stay in the inbox until acknowledged, then be archived; a `todo` thread can be archived if deferred. Two separate dials.
+
+The post-turn auto-check and session-start summary continue to surface changes in `_archive/`, but with a `[archived]` prefix so they're visually distinct from active inbox work.
+
 ## Post-turn auto-check
 
 After every Claude turn, a Stop hook walks the active project's folder and surfaces anything new/changed/deleted since the last check. When `CODESYNC_ROLE` is set, it filters to only items addressed to that role (under `_inbox/<role>/`) plus role-profile changes — other changes get a one-line "N changes outside your inbox" count.
@@ -247,6 +263,8 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 | `/codesync-thread-list` | List threads in your role's inbox (or all inboxes with `--all`); filter by status. |
 | `/codesync-thread-reply <slug>` | Reply to an existing thread; auto-addresses the reply back to the original sender. |
 | `/codesync-thread-set-status <slug> <status>` | Move a thread between `todo` / `wip` / `done` / `blocked` / `note` without hand-editing. |
+| `/codesync-thread-archive <slug>` | Move a thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved, just out of default views. |
+| `/codesync-thread-unarchive <slug>` | Reverse of archive — bring an archived thread back into the active inbox. |
 | `/codesync-status` | Active project + role, Syncthing health, peers attached to the active project, folder sync state, registered roles. |
 
 All commands except `/install-codesync` and `/codesync-project-new` require `CODESYNC_PROJECT` to be set in the terminal.
@@ -265,4 +283,4 @@ Your collaborator runs the same migration when they update. Both of you pick the
 
 ## What's coming
 
-Possibly: a `/codesync-thread-archive` that moves resolved threads out of the active inbox into an `_archive/` subdirectory so the inbox listing stays focused on what's active. The originally planned scope is now in.
+The originally planned scope is in. From here, real-world use will surface what's worth adding next.

@@ -3,8 +3,10 @@
 # Reads frontmatter to enrich each entry with status, from, title.
 #
 # Optional args:
-#   --status <s>   filter to threads with that status (todo|wip|done|blocked|note)
-#   --all-inboxes  list threads in every role's inbox (default: just the active role's)
+#   --status <s>          filter to threads with that status (todo|wip|done|blocked|note)
+#   --all | --all-inboxes list threads in every role's inbox (default: just the active role's)
+#   --archive             list only archived threads (from _archive/) instead of _inbox/
+#   --include-archive     list BOTH inbox and archive; archive entries get an [archived] label
 
 set -euo pipefail
 
@@ -15,15 +17,17 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 FILTER_STATUS=""
 ALL_INBOXES="no"
+SOURCE_MODE="inbox"   # inbox | archive | both
 while [ $# -gt 0 ]; do
   case "$1" in
     --status)              [ $# -ge 2 ] || err "--status requires a value"; FILTER_STATUS="$2"; shift 2 ;;
     --all|--all-inboxes)   ALL_INBOXES="yes"; shift ;;
+    --archive)             SOURCE_MODE="archive"; shift ;;
+    --include-archive)     SOURCE_MODE="both"; shift ;;
     *)                     shift ;;
   esac
 done
 
-# Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
 . "$SCRIPT_DIR/lib/load-env.sh"
 PROJECT="${CODESYNC_PROJECT:-}"
 ROLE="${CODESYNC_ROLE:-}"
@@ -32,10 +36,10 @@ ROLE="${CODESYNC_ROLE:-}"
 
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-python3 - "$SCRIPT_DIR/lib" "$CFG_FILE" "$PROJECT" "$ROLE" "$FILTER_STATUS" "$ALL_INBOXES" <<'PY'
+python3 - "$SCRIPT_DIR/lib" "$CFG_FILE" "$PROJECT" "$ROLE" "$FILTER_STATUS" "$ALL_INBOXES" "$SOURCE_MODE" <<'PY'
 import json, os, sys, time
 
-lib_dir, cfg_path, project, role, filter_status, all_inboxes = sys.argv[1:7]
+lib_dir, cfg_path, project, role, filter_status, all_inboxes, source_mode = sys.argv[1:8]
 sys.path.insert(0, lib_dir)
 from frontmatter import read_frontmatter_from_file
 
@@ -49,25 +53,39 @@ if not proj:
     sys.exit(f"Project '{project}' not found in config.")
 
 proj_path = proj["path"]
-inbox_root = os.path.join(proj_path, "_inbox")
 
-if not os.path.isdir(inbox_root):
-    print(f"No _inbox/ directory in project '{project}'.")
-    sys.exit(0)
+# Build (source_root, is_archive) pairs based on mode
+sources = []
+if source_mode in ("inbox", "both"):
+    sources.append((os.path.join(proj_path, "_inbox"), False))
+if source_mode in ("archive", "both"):
+    sources.append((os.path.join(proj_path, "_archive"), True))
 
-# Decide which subfolders to scan
-if all_inboxes:
-    inbox_dirs = [
-        os.path.join(inbox_root, d)
-        for d in sorted(os.listdir(inbox_root))
-        if os.path.isdir(os.path.join(inbox_root, d))
-    ]
-    header = f"Threads in all inboxes of project '{project}':"
-elif role:
-    inbox_dirs = [os.path.join(inbox_root, role)]
-    header = f"Threads in _inbox/{role}/ of project '{project}':"
-else:
-    sys.exit("CODESYNC_ROLE not set and --all-inboxes not given. Set CODESYNC_ROLE or pass --all-inboxes.")
+# Decide which role-subdirs to scan under each source
+scan_dirs = []   # list of (path, is_archive)
+for root, is_arch in sources:
+    if not os.path.isdir(root):
+        continue
+    if all_inboxes:
+        for d in sorted(os.listdir(root)):
+            full = os.path.join(root, d)
+            if os.path.isdir(full):
+                scan_dirs.append((full, is_arch))
+    elif role:
+        candidate = os.path.join(root, role)
+        if os.path.isdir(candidate):
+            scan_dirs.append((candidate, is_arch))
+    else:
+        sys.exit("CODESYNC_ROLE not set and --all not given. Set CODESYNC_ROLE or pass --all.")
+
+# Build header
+parts = []
+if source_mode == "inbox":   parts.append("inbox")
+if source_mode == "archive": parts.append("archive")
+if source_mode == "both":    parts.append("inbox + archive")
+scope = "all role inboxes" if all_inboxes else f"_inbox/{role}/" if role else "?"
+header = f"Threads in project '{project}' ({', '.join(parts)}):"
+
 
 def short_age(ts):
     try:
@@ -80,9 +98,7 @@ def short_age(ts):
         return "?"
 
 entries = []
-for d in inbox_dirs:
-    if not os.path.isdir(d):
-        continue
+for d, is_arch in scan_dirs:
     for fn in sorted(os.listdir(d)):
         if not fn.endswith(".md"):
             continue
@@ -102,6 +118,7 @@ for d in inbox_dirs:
             "toRole":   fm.get("to", os.path.basename(d)),
             "title":  fm.get("title", "") or fn[:-3],
             "age":    short_age(mtime),
+            "is_archive": is_arch,
             "has_fm": bool(fm),
         })
 
@@ -112,21 +129,28 @@ if filter_status:
 print()
 
 if not entries:
-    print("  (no threads here yet — run /codesync-thread-new)")
+    if source_mode == "archive":
+        print("  (no archived threads yet)")
+    else:
+        print("  (no threads here yet — run /codesync-thread-new)")
     print()
     sys.exit(0)
 
-# Sort: status order (todo, wip, blocked, note, done) then by recency
 STATUS_ORDER = {"todo": 0, "wip": 1, "blocked": 2, "note": 3, "done": 4, "": 5}
-entries.sort(key=lambda e: (STATUS_ORDER.get(e["status"], 5), -os.path.getmtime(e["path"])))
+entries.sort(key=lambda e: (
+    1 if e["is_archive"] else 0,                # inbox before archive
+    STATUS_ORDER.get(e["status"], 5),
+    -os.path.getmtime(e["path"]),
+))
 
 for e in entries:
     status = e["status"] or "no-fm"
     tag = f"[{status}]".ljust(10)
     title = e["title"]
+    arch_prefix = "[archived] " if e["is_archive"] else ""
     if len(title) > 50:
         title = title[:47] + "..."
-    title = title.ljust(50)
+    title = (arch_prefix + title).ljust(60)
     fr = f"from {e['fromRole']}" if e['fromRole'] else "(no from)"
     age = e['age']
     print(f"  {tag} {title} {fr.ljust(18)} {age}")
