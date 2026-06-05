@@ -109,19 +109,14 @@ Loop on edit; STOP on cancel.
 
 ## Step 7 — Write the reply via write-thread.sh
 
-Save the body to a temp file, then call the script. Substitute placeholders BEFORE invoking Bash:
+Pipe the body to the script via stdin. CRITICAL: substitute `<reply_to>`, `<reply_title>`, `<reply_status>`, `<replies_to>` BEFORE invoking Bash, AND replace the heredoc body with the user's actual reply. Keep the heredoc delimiter quoted (`'BODY_EOF'`) so body content passes literally:
 
 ```bash
-TMP=$(mktemp) && cat > "$TMP" <<'BODY_EOF'
+"${CLAUDE_PLUGIN_ROOT}/scripts/write-thread.sh" \
+  --to "<reply_to>" --title "<reply_title>" --status "<reply_status>" \
+  --replies-to "<replies_to>" --body-file - <<'BODY_EOF'
 <reply body from step 5>
 BODY_EOF
-"${CLAUDE_PLUGIN_ROOT}/scripts/write-thread.sh" \
-  --to "<reply_to>" \
-  --title "<reply_title>" \
-  --status "<reply_status>" \
-  --replies-to "<replies_to>" \
-  --body-file "$TMP"
-rm "$TMP"
 ```
 
 Capture `THREAD_FILE` from the output. Surface any script error and STOP.

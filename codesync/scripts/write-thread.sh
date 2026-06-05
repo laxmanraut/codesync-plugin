@@ -8,6 +8,7 @@
 #   --status <status>     (optional) todo|wip|done|blocked|note; defaults to "note"
 #   --replies-to <path>   (optional) relative path from project root to the parent thread
 #   --body-file <path>    (optional) path to a file whose content goes after the frontmatter
+#                         pass "-" to read body from stdin (useful for heredoc piping)
 #
 # Writes the file to: <project-path>/_inbox/<to>/<sluggified-title>.md
 # Refuses to overwrite an existing file.
@@ -104,7 +105,9 @@ print("\n".join(lines))
 PY
 )
 
-if [ -n "$BODY_FILE" ] && [ -f "$BODY_FILE" ]; then
+if [ "$BODY_FILE" = "-" ]; then
+  BODY=$(cat -)
+elif [ -n "$BODY_FILE" ] && [ -f "$BODY_FILE" ]; then
   BODY=$(cat "$BODY_FILE")
 else
   BODY="

@@ -95,18 +95,13 @@ If *cancel*, STOP without writing anything.
 
 ## Step 6 — Write the thread
 
-Save the body to a temp file (because it might be multi-line and contain special characters), then call write-thread.sh. Substitute placeholders BEFORE invoking Bash:
+Pipe the body to the script via stdin. CRITICAL: substitute `<to-role>`, `<title>`, `<status>` BEFORE invoking Bash, AND replace the heredoc body with the user's actual content. Keep the heredoc delimiter quoted (`'BODY_EOF'`) so the body content is passed literally (no shell expansion of `$` or backticks):
 
 ```bash
-TMP=$(mktemp) && cat > "$TMP" <<'BODY_EOF'
+"${CLAUDE_PLUGIN_ROOT}/scripts/write-thread.sh" \
+  --to "<to-role>" --title "<title>" --status "<status>" --body-file - <<'BODY_EOF'
 <body content from step 4>
 BODY_EOF
-"${CLAUDE_PLUGIN_ROOT}/scripts/write-thread.sh" \
-  --to "<to-role>" \
-  --title "<title>" \
-  --status "<status>" \
-  --body-file "$TMP"
-rm "$TMP"
 ```
 
 The script will print `THREAD_FILE=<path>` and `SLUG=<slug>`. Capture them. If the script exited non-zero, surface its error and STOP.

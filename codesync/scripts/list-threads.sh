@@ -16,9 +16,9 @@ FILTER_STATUS=""
 ALL_INBOXES="no"
 while [ $# -gt 0 ]; do
   case "$1" in
-    --status)      [ $# -ge 2 ] || err "--status requires a value"; FILTER_STATUS="$2"; shift 2 ;;
-    --all-inboxes) ALL_INBOXES="yes"; shift ;;
-    *) shift ;;
+    --status)              [ $# -ge 2 ] || err "--status requires a value"; FILTER_STATUS="$2"; shift 2 ;;
+    --all|--all-inboxes)   ALL_INBOXES="yes"; shift ;;
+    *)                     shift ;;
   esac
 done
 
