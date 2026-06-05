@@ -74,6 +74,8 @@ def parse_frontmatter(text):
     fm = {}
     for line in block.splitlines():
         stripped = line.rstrip()
+        if stripped == "":
+            continue  # blank lines don't terminate the codesync block
         if stripped == "codesync:":
             in_cs = True
             continue

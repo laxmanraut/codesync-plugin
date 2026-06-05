@@ -103,6 +103,8 @@ try:
             in_cs = False
             fm = {}
             for line in m.group(1).splitlines():
+                if line.strip() == "":
+                    continue  # blank lines don't terminate the codesync block
                 if line.strip() == "codesync:":
                     in_cs = True; continue
                 if in_cs and line.startswith("  "):
