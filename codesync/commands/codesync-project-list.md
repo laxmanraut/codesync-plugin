@@ -1,7 +1,7 @@
 ---
 description: List all CodeSync projects registered on this machine, marking the one active in this terminal
 argument-hint: "(no arguments)"
-allowed-tools: ["Bash(python3:*)", "Bash(printenv:*)"]
+allowed-tools: ["Bash(python3:*)"]
 ---
 
 # List CodeSync projects
@@ -11,10 +11,10 @@ The user invoked `/codesync-project-list`. Show every project registered on this
 ## Step 1 — Find the active project for this terminal
 
 ```!
-printenv CODESYNC_PROJECT
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lib/resolve.py"
 ```
 
-If output is non-empty, that's the active project. Else no project is active in this terminal.
+Output is two `KEY=VALUE` lines. Extract the value from `CODESYNC_PROJECT='<v>'` (strip single quotes). If non-empty, that's the active project for this terminal (resolved from env var, or from a `.codesync/project.json` walk-up). Else no project is active here.
 
 ## Step 2 — List registered projects
 

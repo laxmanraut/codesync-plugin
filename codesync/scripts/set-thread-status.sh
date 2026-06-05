@@ -38,8 +38,10 @@ case "$NEW_STATUS" in
   *) err "--status must be one of: todo, wip, done, blocked, note (got: $NEW_STATUS)" ;;
 esac
 
+# Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
+. "$SCRIPT_DIR/lib/load-env.sh"
 PROJECT="${CODESYNC_PROJECT:-}"
-[ -n "$PROJECT" ] || err "CODESYNC_PROJECT not set."
+[ -n "$PROJECT" ] || err "CODESYNC_PROJECT not set (and no .codesync/project.json marker found)."
 
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 

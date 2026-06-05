@@ -9,6 +9,7 @@
 set -euo pipefail
 
 CFG_FILE="$HOME/.config/codesync/config.json"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -22,14 +23,14 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
+. "$SCRIPT_DIR/lib/load-env.sh"
 PROJECT="${CODESYNC_PROJECT:-}"
 ROLE="${CODESYNC_ROLE:-}"
 
-[ -n "$PROJECT" ] || err "CODESYNC_PROJECT not set."
+[ -n "$PROJECT" ] || err "CODESYNC_PROJECT not set (and no .codesync/project.json marker found in the current directory or its parents)."
 
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 python3 - "$SCRIPT_DIR/lib" "$CFG_FILE" "$PROJECT" "$ROLE" "$FILTER_STATUS" "$ALL_INBOXES" <<'PY'
 import json, os, sys, time

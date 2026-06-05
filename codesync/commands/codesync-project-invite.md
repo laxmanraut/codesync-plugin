@@ -1,7 +1,7 @@
 ---
 description: Invite a peer to the active project's Syncthing folder (peer must already be device-paired or will be auto-added to known devices)
 argument-hint: "--peer <device-id>"
-allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/invite-peer-to-project.sh:*)", "Bash(printenv:*)"]
+allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/invite-peer-to-project.sh:*)", "Bash(python3:*)"]
 ---
 
 # Invite a peer to the active project
@@ -10,15 +10,15 @@ The user invoked `/codesync-project-invite $ARGUMENTS`. This adds a peer's Synct
 
 ## Step 1 — Confirm a project is active
 
-Run:
+Run the resolver (env first, then `.codesync/project.json` walk-up):
 
 ```!
-printenv CODESYNC_PROJECT
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lib/resolve.py"
 ```
 
-If output is empty, STOP and tell the user: *"No project active in this terminal. Set CODESYNC_PROJECT in your shell first (or run /codesync-project-list to see what's registered)."*
+Extract the value from `CODESYNC_PROJECT='<v>'` (strip single quotes). If empty, STOP: *"No project active in this terminal. Set CODESYNC_PROJECT in your shell or attach this directory with /codesync-project-attach <project>."*
 
-Capture the project name as `<PROJECT>`.
+The resolved value becomes `<PROJECT>`.
 
 ## Step 2 — Parse the peer device ID
 

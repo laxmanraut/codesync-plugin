@@ -1,7 +1,7 @@
 ---
 description: Register a new role profile (or update an existing one) for the active project
 argument-hint: "(no arguments — interactive)"
-allowed-tools: ["Bash(printenv:*)"]
+allowed-tools: ["Bash(python3:*)"]
 ---
 
 # Register a CodeSync role
@@ -10,15 +10,17 @@ The user invoked `/codesync-role-new`. This command adds (or updates) a role pro
 
 ## Step 1 — Resolve the active project
 
-Run:
+Run the resolver (checks env var first, then walks up looking for `.codesync/project.json`):
 
 ```!
-printenv CODESYNC_PROJECT
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lib/resolve.py"
 ```
 
-If output is empty, STOP and tell the user: *"No project active in this terminal. Set CODESYNC_PROJECT in your shell first (or run /codesync-project-list to see what's registered)."*
+Output is two `KEY=VALUE` lines. Extract the value after `CODESYNC_PROJECT=` (strip surrounding single quotes).
 
-Capture the project name. Then read `~/.config/codesync/config.json` and look up `projects.<active>.path` — that's the directory the role will be written under. If the project isn't in the config, STOP and tell the user to run `/codesync-project-new` first (or to fix CODESYNC_PROJECT to a name that exists).
+If empty, STOP and tell the user: *"No project active in this terminal. Either set CODESYNC_PROJECT in your shell, or attach this directory with /codesync-project-attach <project>."*
+
+Then read `~/.config/codesync/config.json` and look up `projects.<active>.path` — that's the directory the role will be written under. If the project isn't in the config, STOP and tell the user to run `/codesync-project-new` first.
 
 ## Step 2 — Read any existing role profiles
 

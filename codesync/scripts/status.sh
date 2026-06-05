@@ -7,6 +7,7 @@ set -euo pipefail
 
 CFG_FILE="$HOME/.config/codesync/config.json"
 API="http://127.0.0.1:8384"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -15,8 +16,11 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 API_KEY=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("syncthing_api_key", ""))' "$CFG_FILE")
 [ -n "$API_KEY" ] || err "syncthing_api_key missing in $CFG_FILE. Re-run /install-codesync."
 
+# Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
+. "$SCRIPT_DIR/lib/load-env.sh"
+
 ACTIVE_PROJECT="${CODESYNC_PROJECT:-}"
-[ -n "$ACTIVE_PROJECT" ] || err "No project active in this terminal. Set CODESYNC_PROJECT (or run /codesync-project-list to see what's registered)."
+[ -n "$ACTIVE_PROJECT" ] || err "No project active in this terminal. Set CODESYNC_PROJECT or attach this directory with /codesync-project-attach. Run /codesync-project-list to see what's registered."
 
 # Confirm the project exists in config
 PROJECT_EXISTS=$(python3 -c '

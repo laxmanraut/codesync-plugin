@@ -18,6 +18,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 log() { printf '  %s\n' "$*"; }
 err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
+# Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
+. "$SCRIPT_DIR/lib/load-env.sh"
+
 # 1. Args
 PEER_ID=""
 while [ $# -gt 0 ]; do

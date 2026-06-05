@@ -1,43 +1,44 @@
 ---
 description: List role profiles registered in the active project (synced from paired peers too)
 argument-hint: "(no arguments)"
-allowed-tools: ["Bash(printenv:*)"]
+allowed-tools: ["Bash(python3:*)"]
 ---
 
 # List CodeSync roles
 
 The user invoked `/codesync-role-list`. Print every role profile that exists in the active project's `_roles/` directory, with a brief summary. Mark the role currently active in this terminal (if any).
 
-## Step 1 — Resolve the active project
+## Step 1 — Resolve the active project + role
 
-Run:
+Run the resolver, which checks env vars first then walks up from the current directory looking for a `.codesync/project.json` marker file:
 
 ```!
-printenv CODESYNC_PROJECT
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lib/resolve.py"
 ```
 
-If output is empty, STOP and tell the user: *"No project active in this terminal. Set CODESYNC_PROJECT in your shell first (or run /codesync-project-list to see what's registered)."*
+Output is two `KEY=VALUE` lines:
+
+```
+CODESYNC_PROJECT='<name or empty>'
+CODESYNC_ROLE='<name or empty>'
+```
+
+Extract the value from each line (strip the surrounding single quotes).
+
+If `CODESYNC_PROJECT` is empty, STOP and tell the user: *"No project active in this terminal. Either set CODESYNC_PROJECT in your shell, or attach this directory with /codesync-project-attach <project>."*
 
 Read `~/.config/codesync/config.json` and look up `projects.<active>.path`. If the project isn't in the config, STOP and tell the user to run `/codesync-project-new` first.
 
-## Step 2 — Find which role is active in this terminal
+If `CODESYNC_ROLE` is non-empty, that's the active role for this terminal. If empty, no role is currently active (but you can still list — just don't mark any as active).
 
-Run:
-
-```!
-printenv CODESYNC_ROLE
-```
-
-If output is non-empty, that's the active role for this terminal. If empty, no role is currently active.
-
-## Step 3 — List role files
+## Step 2 — List role files
 
 List the `.md` files in `<project-path>/_roles/`, **ignoring `README.md`**. For each remaining file:
 - Read its content.
 - Extract the role name (filename without `.md`).
 - Pull the first 1–2 bullets from `## Owns` and `## Does not own` as a brief summary.
 
-## Step 4 — Print the listing
+## Step 3 — Print the listing
 
 Print in this shape (use `← active here` next to the role whose name matches `CODESYNC_ROLE`):
 

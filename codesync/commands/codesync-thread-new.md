@@ -1,7 +1,7 @@
 ---
 description: Start a new thread (note, task, question, or decision) addressed to another role in the active project
 argument-hint: "(no arguments — interactive)"
-allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/write-thread.sh:*)", "Bash(printenv:*)"]
+allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/write-thread.sh:*)", "Bash(python3:*)"]
 ---
 
 # Start a new CodeSync thread
@@ -10,23 +10,26 @@ The user invoked `/codesync-thread-new`. This creates a markdown file in the act
 
 ## Step 1 — Confirm a project and a role are active
 
-Run:
+Run the resolver (checks env vars first, then walks up looking for `.codesync/project.json`):
 
 ```!
-printenv CODESYNC_PROJECT
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lib/resolve.py"
 ```
 
-If empty, STOP and tell the user: *"No project active in this terminal. Set CODESYNC_PROJECT in your shell first."*
+Output is two `KEY=VALUE` lines:
 
-Run:
-
-```!
-printenv CODESYNC_ROLE
+```
+CODESYNC_PROJECT='<name or empty>'
+CODESYNC_ROLE='<name or empty>'
 ```
 
-If empty, STOP and tell the user: *"No role active in this terminal. Set CODESYNC_ROLE in your shell first — threads need to know who they're from."*
+Extract both values (strip the single quotes).
 
-Capture both. They become `FROM_ROLE` (your role) and `PROJECT`.
+If `CODESYNC_PROJECT` is empty, STOP: *"No project active in this terminal. Set CODESYNC_PROJECT in your shell or attach this directory with /codesync-project-attach <project>."*
+
+If `CODESYNC_ROLE` is empty, STOP: *"No role active in this terminal. Set CODESYNC_ROLE in your shell — threads need to know who they're from."*
+
+The resolved values become `PROJECT` and `FROM_ROLE`.
 
 ## Step 2 — Read the project's role profiles so you know who can receive
 

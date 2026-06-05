@@ -1,7 +1,7 @@
 ---
 description: Reply to a thread in your active role's inbox — addressed back to the original sender, linked via replies-to
 argument-hint: "<slug-or-path>"
-allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/write-thread.sh:*)", "Bash(python3:*)", "Bash(printenv:*)"]
+allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/write-thread.sh:*)", "Bash(python3:*)"]
 ---
 
 # Reply to a CodeSync thread
@@ -10,15 +10,13 @@ The user invoked `/codesync-thread-reply $ARGUMENTS`. Create a reply file addres
 
 ## Step 1 — Confirm project and role are active
 
-```!
-printenv CODESYNC_PROJECT
-```
+Run the resolver (env vars first, then `.codesync/project.json` walk-up):
 
 ```!
-printenv CODESYNC_ROLE
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lib/resolve.py"
 ```
 
-Both required. If either is empty, STOP and tell the user to set the missing one in their shell.
+Output is `CODESYNC_PROJECT='<v>'` and `CODESYNC_ROLE='<v>'` on two lines. Both must be non-empty. If either is empty, STOP and tell the user to set the missing one in their shell, or use `/codesync-project-attach` to set the project for this directory.
 
 ## Step 2 — Resolve the original thread file
 

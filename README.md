@@ -101,6 +101,21 @@ $ claude
   Active role:    frontend
 ```
 
+## Activating a project by `cd`-ing into a directory
+
+You can avoid setting env vars for every terminal by *attaching* a directory to a project. Once attached, any Claude Code session launched from inside that directory (or any subdirectory) auto-resolves the project — no `export` needed.
+
+```
+cd ~/code/lead-inbox-app
+/codesync-project-attach lead_inbox backend
+```
+
+That drops a small `.codesync/project.json` marker file in the directory. The marker can be committed to git so your collaborator gets the same default when they clone, or `.gitignore`'d if you prefer it private to your machine.
+
+**Precedence:** if the shell has `CODESYNC_PROJECT` exported, that always wins. The marker is the default fallback. So you can have a marker setting one project, and override per-terminal with `export CODESYNC_PROJECT=otherproject` when needed.
+
+For the role, the marker can declare a `default_role` that's used when `CODESYNC_ROLE` is unset — handy if a particular code directory is mostly worked on as one role.
+
 ## Adding another project
 
 ```
@@ -224,6 +239,7 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 | `/codesync-project-new` | Register an additional project. |
 | `/codesync-project-list` | List all projects on this machine; mark the active one. |
 | `/codesync-project-invite --peer <id>` | Invite an existing peer to the active project. |
+| `/codesync-project-attach <project> [<role>]` | Drop a `.codesync/project.json` marker in the current dir so terminals launched here auto-resolve the project. |
 | `/codesync-pair --peer <id>` | Pair a brand-new peer at the device level and invite them to the active project in one step. |
 | `/codesync-role-new` | Register a role in the active project (or update an existing one). |
 | `/codesync-role-list` | List roles in the active project; mark the active one. |
@@ -249,6 +265,4 @@ Your collaborator runs the same migration when they update. Both of you pick the
 
 ## What's coming
 
-CWD auto-detection — so `cd ~/code/lead_inbox` automatically activates that project for the terminal (via a `.codesync/project.yaml` marker file the plugin walks up the directory tree to find), without having to `export CODESYNC_PROJECT=` manually each shell. Env var override stays for power users.
-
-Possibly: a `/codesync-thread-archive` that moves resolved threads out of the active inbox into an `_archive/` subdirectory so the inbox listing stays focused on what's active.
+Possibly: a `/codesync-thread-archive` that moves resolved threads out of the active inbox into an `_archive/` subdirectory so the inbox listing stays focused on what's active. The originally planned scope is now in.
