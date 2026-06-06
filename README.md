@@ -59,12 +59,14 @@ This will:
 
 1. Install Syncthing via Homebrew if needed and start it as a background service.
 2. Save your Syncthing API key and Device ID.
-3. Ask you to register your first **project** (e.g. `lead_inbox`, `mobile-app`). Each project becomes its own Syncthing folder at `~/codesync/<project>/`.
-4. Walk you through registering your first **role** in that project — what you do, what you don't do.
+3. Ask you to pick or create a **project** (e.g. `lead_inbox`, `mobile-app`). Each project becomes its own Syncthing folder at `~/codesync/<project>/`. If projects already exist on this machine, a numbered picker shows them plus a "New project" option.
+4. Show a numbered **role picker** with 12 predefined roles across Engineering, Product & Design, and Project & People — pick one or more (comma-separated). Hybrid is fine: pick `5,7` for "Product Manager + Designer" in one go. Option 13 is "Custom (free-form)" for roles outside the curated list. Each pick comes with a starter `Owns` / `Does not own` template you can edit before saving.
 5. Print the activation command:
    ```
-   export CODESYNC_PROJECT=<project> CODESYNC_ROLE=<role>
+   export CODESYNC_PROJECT=<project> CODESYNC_ROLE=<primary-role>
    ```
+
+If you register multiple roles (e.g. PM + Designer), the post-turn inbox check and session-start summary will automatically cover ALL of them. You only need to switch `CODESYNC_ROLE` when you want to *send* messages "as" the other hat — receiving covers everything.
 
 ## Activating a project + role in a terminal
 
@@ -140,6 +142,8 @@ That drops a small `.codesync/project.json` marker file in the directory. The ma
 
 For the role, the marker can declare a `default_role` that's used when `CODESYNC_ROLE` is unset — handy if a particular code directory is mostly worked on as one role.
 
+**Auto-offer from `/codesync-role-new`:** if you run `/codesync-role-new` in a terminal where no project is active, it walks you through picking (or creating) a project, then offers to drop a marker in the current directory so you don't need to set the env var. The offer is guarded against general-purpose locations (`~`, `/tmp`, `/`) — in those it defaults to *no* with a warning, since a marker there would affect every terminal launched from your home.
+
 ## Adding another project
 
 ```
@@ -147,6 +151,8 @@ For the role, the marker can declare a `default_role` that's used when `CODESYNC
 ```
 
 Walks through naming + creates a new Syncthing folder + scaffold. After it runs, set `CODESYNC_PROJECT=<new-name>` in your shell (or use `cs <new-name> <role>`) and start `/codesync-role-new` inside the new project to register roles for it.
+
+**Shortcut:** `/codesync-role-new` and `/codesync-thread-new` both fall back to a project picker if no project is active in the terminal — so you can skip the explicit `/codesync-project-new` step and just run `/codesync-role-new` directly. The picker will offer existing projects plus "New project (enter name)" as the last option.
 
 ## Pairing with a collaborator
 

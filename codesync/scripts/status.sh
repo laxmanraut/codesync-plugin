@@ -49,6 +49,7 @@ folder_id = project["folder_id"]
 proj_path = project["path"]
 device_id = cfg.get("device_id", "")
 active_role = os.environ.get("CODESYNC_ROLE", "").strip()
+registered_roles = project.get("roles", []) or []
 
 def get(path, timeout=5):
     req = urllib.request.Request(f"{api}{path}", headers={"X-API-Key": api_key})
@@ -63,6 +64,10 @@ print("───────────────")
 print(f"  Active project:               {project_name}")
 print(f"  Active role (this terminal):  {fmt(active_role)}" if active_role else
       "  Active role (this terminal):  (none — set CODESYNC_ROLE in your shell)")
+if registered_roles:
+    print(f"  Roles registered on device:   {', '.join(registered_roles)}")
+else:
+    print(f"  Roles registered on device:   (none — run /codesync-role-new)")
 print(f"  Project path:                 {proj_path}")
 print(f"  Device ID:                    {fmt(device_id)}")
 print()
@@ -126,7 +131,12 @@ if os.path.isdir(roles_dir):
     else:
         for rf in files:
             name = rf[:-3]
-            tag = "  ← active here" if name == active_role else ""
+            tags = []
+            if name == active_role:
+                tags.append("← active here")
+            if name in registered_roles:
+                tags.append("← registered on this device")
+            tag = "  " + ", ".join(tags) if tags else ""
             print(f"    {name}{tag}")
 else:
     print("    (_roles/ directory not found inside the project path)")

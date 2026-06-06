@@ -1,0 +1,199 @@
+{
+  "_comment": "CodeSync predefined role catalog. Read by /install-codesync and /codesync-role-new to present a numbered picker. Each role has a kebab-case 'name' (used as the role-file basename and as CODESYNC_ROLE value), a human-readable 'display' label, and owns/does_not_own bullet templates that pre-fill the profile. Real teams will edit ~30% of these before saving; that's expected.",
+  "categories": [
+    {
+      "name": "Engineering",
+      "roles": [
+        {
+          "name": "backend",
+          "display": "Backend",
+          "owns": [
+            "REST/GraphQL APIs",
+            "Database schema and queries",
+            "Auth, session handling, background jobs",
+            "Server-side business logic"
+          ],
+          "does_not_own": [
+            "UI components (web or mobile)",
+            "Design system, visual design",
+            "Infrastructure automation, CI/CD"
+          ]
+        },
+        {
+          "name": "frontend",
+          "display": "Frontend",
+          "owns": [
+            "Web UI components and pages",
+            "Client-side state management",
+            "Accessibility and browser performance",
+            "Integration with backend APIs from the client"
+          ],
+          "does_not_own": [
+            "Server endpoints and database",
+            "Mobile-app code",
+            "Infrastructure, CI/CD"
+          ]
+        },
+        {
+          "name": "mobile",
+          "display": "Mobile",
+          "owns": [
+            "iOS / Android / React Native apps",
+            "Mobile-specific UX and gestures",
+            "App store submissions and releases",
+            "Push notifications, deep links"
+          ],
+          "does_not_own": [
+            "Web UI",
+            "Backend APIs",
+            "Infrastructure, CI/CD"
+          ]
+        },
+        {
+          "name": "devops",
+          "display": "DevOps / Platform",
+          "owns": [
+            "CI/CD pipelines",
+            "Infrastructure-as-code, cloud configuration",
+            "Monitoring, alerting, observability",
+            "Deployment, secrets management"
+          ],
+          "does_not_own": [
+            "Feature code (backend or frontend)",
+            "UI / UX decisions",
+            "Product strategy"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Product & Design",
+      "roles": [
+        {
+          "name": "pm",
+          "display": "Product Manager",
+          "owns": [
+            "Product strategy and roadmap",
+            "Requirements and prioritization",
+            "User research synthesis",
+            "Stakeholder alignment"
+          ],
+          "does_not_own": [
+            "Technical implementation choices",
+            "Design execution",
+            "Individual ticket scoping (often handled by PO or eng lead)"
+          ]
+        },
+        {
+          "name": "po",
+          "display": "Product Owner",
+          "owns": [
+            "Backlog grooming and management",
+            "Sprint scoping and acceptance criteria",
+            "Sprint-level prioritization",
+            "Stakeholder communication during the sprint"
+          ],
+          "does_not_own": [
+            "Long-term product strategy (PM)",
+            "Technical implementation",
+            "Hands-on design"
+          ]
+        },
+        {
+          "name": "designer",
+          "display": "Designer (UI/UX)",
+          "owns": [
+            "Visual design and interaction patterns",
+            "Design system and component library specs",
+            "Prototypes and design exploration",
+            "Accessibility from a UX angle"
+          ],
+          "does_not_own": [
+            "Front-end implementation (handoff specs only)",
+            "Backend, infrastructure",
+            "Product strategy"
+          ]
+        },
+        {
+          "name": "tech-writer",
+          "display": "Tech Writer",
+          "owns": [
+            "Documentation (user guides, API references)",
+            "Tutorials and onboarding content",
+            "Release notes",
+            "In-product copy"
+          ],
+          "does_not_own": [
+            "Code, design, product decisions",
+            "Marketing copy (usually owned by marketing)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Project & People",
+      "roles": [
+        {
+          "name": "project-manager",
+          "display": "Project Manager",
+          "owns": [
+            "Schedule, dependencies, milestones",
+            "Cross-team coordination",
+            "Risk tracking and mitigation",
+            "Status reporting"
+          ],
+          "does_not_own": [
+            "Technical decisions",
+            "Product scope (usually PM)",
+            "Individual feature design"
+          ]
+        },
+        {
+          "name": "eng-manager",
+          "display": "Engineering Manager",
+          "owns": [
+            "People management, hiring, performance",
+            "Team health and culture",
+            "Technical strategy at the team level",
+            "Removing blockers for engineers"
+          ],
+          "does_not_own": [
+            "Day-to-day hands-on coding (usually)",
+            "Product roadmap (works with PM)",
+            "Hands-on design"
+          ]
+        },
+        {
+          "name": "tech-lead",
+          "display": "Tech Lead",
+          "owns": [
+            "Technical direction within the team",
+            "Architecture and design reviews",
+            "Code review and mentoring",
+            "Hands-on coding on the hardest parts"
+          ],
+          "does_not_own": [
+            "People management (usually eng-manager)",
+            "Product roadmap",
+            "Design"
+          ]
+        },
+        {
+          "name": "qa",
+          "display": "QA / Test",
+          "owns": [
+            "Test strategy and test plan",
+            "Test automation",
+            "Exploratory testing and bug verification",
+            "Release-readiness signoff"
+          ],
+          "does_not_own": [
+            "Feature implementation",
+            "Product decisions",
+            "Infrastructure"
+          ]
+        }
+      ]
+    }
+  ]
+}

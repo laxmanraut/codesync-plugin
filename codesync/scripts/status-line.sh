@@ -49,7 +49,13 @@ try:
         except Exception:
             baseline = {}
 
-    if role:
+    # Scan inboxes for: (1) all roles registered for this device in this
+    # project (preferred), else (2) just CODESYNC_ROLE if set, else (3) all
+    # inboxes under the project.
+    registered = proj.get("roles", []) or []
+    if registered:
+        scan_dirs = [os.path.join(inbox_root, r) for r in registered]
+    elif role:
         scan_dirs = [os.path.join(inbox_root, role)]
     else:
         scan_dirs = [

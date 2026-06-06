@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # session-start.sh — CodeSync SessionStart hook (v0.7.0+).
 # At the start of every Claude Code session, if CODESYNC_PROJECT is set,
-# summarise the user's inbox so they know what's pending without having
+# summarise the user's inbox(es) so they know what's pending without having
 # to run a slash command.
 #
-# - Silent if CODESYNC_PROJECT is unset or unknown (matches Stop hook's
-#   fail-open posture; no nagging for unrelated terminals).
-# - With project but no role: prompts user to set CODESYNC_ROLE.
-# - With project + role: prints counts by status, lists top items.
-# - Silent if the inbox has no items.
+# - Silent if CODESYNC_PROJECT is unset or unknown.
+# - With project + registered roles in config: shows ALL registered roles'
+#   inboxes, grouped by role.
+# - With project + no registered roles but CODESYNC_ROLE env var set:
+#   backward-compat path — shows just that role's inbox.
+# - With project + neither: nudges user to register a role.
+# - Silent if every inbox is empty.
 # - Silent on errors.
 
 CFG_FILE="$HOME/.config/codesync/config.json"
@@ -37,23 +39,29 @@ try:
 
     project = cfg.get("projects", {}).get(active_project)
     if not project:
-        # CODESYNC_PROJECT set but unknown — silent (other surfaces will alert)
+        # CODESYNC_PROJECT set but unknown — silent
         sys.exit(0)
 
     proj_path = project.get("path", "")
     if not proj_path or not os.path.isdir(proj_path):
         sys.exit(0)
 
-    # Project set but no role — nudge but don't error
-    if not active_role:
+    # Determine which roles to show inboxes for:
+    #   1. projects.<name>.roles (this device's registered roles) — preferred
+    #   2. CODESYNC_ROLE env var (backward compat)
+    #   3. Neither → nudge to register a role
+    registered = project.get("roles", []) or []
+    if registered:
+        roles_to_show = list(registered)
+        source = "registered"
+    elif active_role:
+        roles_to_show = [active_role]
+        source = "env"
+    else:
         print()
-        print(f"[codesync] Project '{active_project}' active in this terminal, but CODESYNC_ROLE is not set.")
-        print(f"           Set it in your shell (e.g. export CODESYNC_ROLE=backend) to see your inbox.")
-        sys.exit(0)
-
-    inbox_path = os.path.join(proj_path, "_inbox", active_role)
-    if not os.path.isdir(inbox_path):
-        # Inbox dir doesn't exist yet — silent
+        print(f"[codesync] Project '{active_project}' active, but no roles registered on this device.")
+        print(f"           Run /codesync-role-new to register a role, or export CODESYNC_ROLE=<name>")
+        print(f"           in your shell if you want to use a role that's already registered elsewhere.")
         sys.exit(0)
 
     def short_age(ts):
@@ -66,56 +74,75 @@ try:
         except Exception:
             return "?"
 
-    # Scan inbox
-    entries = []
-    for fn in sorted(os.listdir(inbox_path)):
-        if not fn.endswith(".md") or fn == "README.md":
-            continue
-        full = os.path.join(inbox_path, fn)
-        fm = read_frontmatter_from_file(full) or {}
-        try:
-            mtime = os.path.getmtime(full)
-        except OSError:
-            mtime = 0
-        entries.append({
-            "file":   fn,
-            "status": fm.get("status", ""),
-            "title":  fm.get("title", "") or fn[:-3],
-            "from":   fm.get("from", ""),
-            "mtime":  mtime,
-            "age":    short_age(mtime),
-            "has_fm": bool(fm),
-        })
+    STATUS_PRI = {"todo": 0, "wip": 1, "blocked": 2, "note": 3, "done": 4, "(no-fm)": 5, "": 5}
 
-    if not entries:
-        # Empty inbox — silent
+    def scan_inbox(role):
+        inbox_path = os.path.join(proj_path, "_inbox", role)
+        if not os.path.isdir(inbox_path):
+            return []
+        entries = []
+        for fn in sorted(os.listdir(inbox_path)):
+            if not fn.endswith(".md") or fn == "README.md":
+                continue
+            full = os.path.join(inbox_path, fn)
+            fm = read_frontmatter_from_file(full) or {}
+            try:
+                mtime = os.path.getmtime(full)
+            except OSError:
+                mtime = 0
+            entries.append({
+                "file":   fn,
+                "status": fm.get("status", ""),
+                "title":  fm.get("title", "") or fn[:-3],
+                "from":   fm.get("from", ""),
+                "mtime":  mtime,
+                "age":    short_age(mtime),
+            })
+        entries.sort(key=lambda e: (STATUS_PRI.get(e["status"] or "(no-fm)", 5), -e["mtime"]))
+        return entries
+
+    # Scan each role's inbox
+    per_role = {role: scan_inbox(role) for role in roles_to_show}
+    total = sum(len(es) for es in per_role.values())
+
+    if total == 0:
+        # Every inbox empty — silent
         sys.exit(0)
 
-    # Tally counts by status
-    counts = {}
-    for e in entries:
-        s = e["status"] or "(no-fm)"
-        counts[s] = counts.get(s, 0) + 1
-
-    # Build the summary line
-    order = ["todo", "wip", "blocked", "note", "done", "(no-fm)"]
-    parts = []
-    for s in order:
-        if counts.get(s):
-            parts.append(f"{counts[s]} {s}")
-    counts_str = ", ".join(parts) if parts else f"{len(entries)} items"
-
+    # Header
+    if len(roles_to_show) == 1:
+        roles_label = f"Role: {roles_to_show[0]}"
+    else:
+        roles_label = f"Roles: {', '.join(roles_to_show)}"
     print()
-    print(f"[codesync] Project: {active_project}  Role: {active_role}")
-    print(f"  Inbox: {counts_str}")
+    print(f"[codesync] Project: {active_project}  {roles_label}")
 
-    # Show top items sorted by status priority then recency
-    STATUS_PRI = {"todo": 0, "wip": 1, "blocked": 2, "note": 3, "done": 4, "(no-fm)": 5, "": 5}
-    entries.sort(key=lambda e: (STATUS_PRI.get(e["status"] or "(no-fm)", 5), -e["mtime"]))
+    # Per-role section
+    for role in roles_to_show:
+        entries = per_role[role]
+        if not entries:
+            continue
+        counts = {}
+        for e in entries:
+            s = e["status"] or "(no-fm)"
+            counts[s] = counts.get(s, 0) + 1
+        order = ["todo", "wip", "blocked", "note", "done", "(no-fm)"]
+        parts = []
+        for s in order:
+            if counts.get(s):
+                parts.append(f"{counts[s]} {s}")
+        counts_str = ", ".join(parts) if parts else f"{len(entries)} items"
 
-    top = entries[:5]
-    if top:
-        print()
+        if len(roles_to_show) > 1:
+            print()
+            print(f"  Inbox ({role}): {counts_str}")
+        else:
+            print(f"  Inbox: {counts_str}")
+            print()
+
+        # Top items for this role
+        per_role_top = 5 if len(roles_to_show) == 1 else 3
+        top = entries[:per_role_top]
         for e in top:
             tag = f"[{e['status'] or 'no-fm'}]".ljust(10)
             title = e["title"]
@@ -123,8 +150,8 @@ try:
                 title = title[:47] + "..."
             from_str = f"from {e['from']}" if e["from"] else "no from"
             print(f"    {tag} {title} ({from_str}, {e['age']})")
-        if len(entries) > 5:
-            print(f"    …and {len(entries) - 5} more")
+        if len(entries) > per_role_top:
+            print(f"    …and {len(entries) - per_role_top} more")
 
     print()
     print("  Run /codesync-thread-list to see them, or /codesync-thread-reply <slug> to respond.")

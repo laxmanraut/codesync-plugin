@@ -1,16 +1,18 @@
 ---
-description: Register a new role profile (or update an existing one) for the active project
+description: Register one or more role profiles in the active project (or pick a project first if none is active)
 argument-hint: "(no arguments — interactive)"
-allowed-tools: ["Bash(python3:*)"]
+allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/create-project.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-role-in-config.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/attach-project.sh:*)", "Bash(python3:*)"]
 ---
 
-# Register a CodeSync role
+# Register CodeSync role(s)
 
-The user invoked `/codesync-role-new`. This command adds (or updates) a role profile in the active project's `_roles/` directory. Roles are *definitions* shared with all peers invited to the same project via Syncthing. **Activation** of a role for a given terminal is separate — done by setting `CODESYNC_ROLE` in the shell. This command only creates the definition.
+The user invoked `/codesync-role-new`. This adds one OR MORE role profiles in a project's `_roles/` directory. Roles are *definitions* shared via Syncthing with all peers invited to the project. **Activation** in a given terminal is separate — set `CODESYNC_ROLE` in the shell to wear that hat for outgoing messages. This command only creates the definitions.
 
-## Step 1 — Resolve the active project
+If no project is active in this terminal, the command starts with a project picker (existing projects + "New project" option). After picking, it walks through the role picker the same way `/install-codesync` does.
 
-Run the resolver (checks env var first, then walks up looking for `.codesync/project.json`):
+## Step 1 — Resolve the active project (if any)
+
+Run the resolver (checks env var, then walks up looking for `.codesync/project.json`):
 
 ```!
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lib/resolve.py"
@@ -18,115 +20,285 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lib/resolve.py"
 
 Output is two `KEY=VALUE` lines. Extract the value after `CODESYNC_PROJECT=` (strip surrounding single quotes).
 
-If empty, STOP and tell the user: *"No project active in this terminal. Either set CODESYNC_PROJECT in your shell, or attach this directory with /codesync-project-attach <project>."*
+If `CODESYNC_PROJECT` is non-empty AND that project exists in `~/.config/codesync/config.json`, set `ACTIVE_PROJECT = <name>` and `PROJECT_PATH` from `projects.<name>.path`, then skip to Step 3.
 
-Then read `~/.config/codesync/config.json` and look up `projects.<active>.path` — that's the directory the role will be written under. If the project isn't in the config, STOP and tell the user to run `/codesync-project-new` first.
+If `CODESYNC_PROJECT` is empty (or set but unregistered), continue to Step 2.
 
-## Step 2 — Read any existing role profiles
+## Step 2 — Project picker fallback
 
-List the `.md` files in `<project-path>/_roles/`, **ignoring `README.md`**. For each remaining file, read its full content — these are the roles already registered on this machine or synced from paired peers.
+Read the `projects` map from `~/.config/codesync/config.json`.
 
-Hold those profiles in mind for the conflict check in step 4. If the directory has no role files yet, there is nothing to compare against — proceed.
+**Case A — No projects registered yet:**
 
-## Step 3 — Ask the user about the role
+Ask the user: *"No CodeSync project is set up yet. What should the first one be called? Pick a name both you and your collaborators will agree on — it must match exactly across machines. Lowercase letters, digits, dashes, and underscores only (e.g. `lead_inbox`, `mobile-app`)."*
 
-Ask the user EXACTLY this question (multi-line input — they may type several lines):
+Validate (regex `^[a-z0-9][a-z0-9_-]*$`). Re-ask if invalid.
 
-> Tell me about the role you want to register.
+Run create-project. Substitute `<NAME>` before invoking Bash:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/create-project.sh" --name "<NAME>"
+```
+
+Capture `PROJECT_NAME`, `PROJECT_PATH` from the script output. Set `ACTIVE_PROJECT` and `PROJECT_PATH` accordingly.
+
+**Case B — Projects already registered:**
+
+Print a numbered picker:
+
+```
+No project is active in this terminal. Which project is this role for?
+
+  1. lead_inbox       (/Users/you/codesync/lead_inbox)
+  2. mobile-app       (/Users/you/codesync/mobile-app)
+  3. New project (enter name)
+
+Pick one (1-3):
+```
+
+Wait for the user's number. Validate it's in range. Re-ask on invalid input.
+
+- If they pick an existing project: set `ACTIVE_PROJECT` and `PROJECT_PATH` from config.
+- If they pick "New project": ask for the name (validate as in Case A), then run `create-project.sh --name "<NAME>"`. Capture outputs.
+
+## Step 3 — Read existing role profiles in the active project
+
+List the `.md` files in `<PROJECT_PATH>/_roles/`, **ignoring `README.md`**. For each, read full content. These are the existing roles (yours and synced peers').
+
+Hold for conflict check in Step 5. If empty, proceed.
+
+## Step 4 — Role picker (multi-select)
+
+Read the role catalog from `${CLAUDE_PLUGIN_ROOT}/scripts/lib/roles.json`. Shape:
+
+```json
+{"categories": [{"name": "Engineering", "roles": [{"name": "backend", "display": "Backend", "owns": [...], "does_not_own": [...]}, ...]}, ...]}
+```
+
+Render one numbered picker, grouped by category, with "Custom (free-form)" last:
+
+```
+Pick one or more roles to register in "<ACTIVE_PROJECT>"
+(comma-separated numbers — e.g. "5,7" for PM + Designer):
+
+  Engineering
+    1. Backend
+    2. Frontend
+    3. Mobile
+    4. DevOps / Platform
+
+  Product & Design
+    5. Product Manager
+    6. Product Owner
+    7. Designer (UI/UX)
+    8. Tech Writer
+
+  Project & People
+    9. Project Manager
+   10. Engineering Manager
+   11. Tech Lead
+   12. QA / Test
+
+  13. Custom (free-form — describe your own role)
+
+Your pick:
+```
+
+Parse comma-separated numbers. Validate range. Re-ask on invalid input.
+
+Build `PICKED_ROLES` — each entry is either a predefined role object or the literal `"custom"`.
+
+If multiple roles were picked, briefly tell the user: *"Got it — you'll register N roles in this project: \<list of displays\>. I'll walk through them one at a time."*
+
+## Step 5 — For each picked role: propose, conflict-check, confirm, write
+
+Initialize `REGISTERED_ROLE_NAMES = []`.
+
+For each entry in `PICKED_ROLES`, in order:
+
+### Predefined role (has `name`, `owns`, `does_not_own`)
+
+1. Build proposed markdown:
+
+```
+# <name>
+
+## Owns
+- <each item from owns>
+
+## Does not own
+- <each item from does_not_own>
+```
+
+2. Run the conflict check (see Step 5b below) against the existing profiles read in Step 3.
+
+3. Show and ask:
+
+> Here's the proposed profile for **<display>** (`<name>`):
 >
-> Cover three things in your own words:
-> - **What this role does** (the work it handles)
-> - **What it doesn't do** (so other Claude agents don't misroute things to it)
-> - **Anything else** worth knowing — stack, hours, preferences
+> \<markdown\>
 >
-> A few sentences or bullets — whatever feels natural. Examples:
-> - *"Backend — Python on Postgres. Owns auth, REST endpoints, background jobs. Not the UI, not infra. FastAPI stack."*
-> - *"Mobile — React Native iOS/Android. UI, client state, push notifications. Not backend, not the web frontend."*
+> Look right?
+> - reply **yes** to write it
+> - reply **edit** and tell me what to change
+> - reply **skip** to drop this role
 
-Wait for the user's response.
+If *edit*: revise and re-show. Loop until yes or skip.
 
-## Step 4 — Parse the response and check for conflicts
+If *yes*: write `<PROJECT_PATH>/_roles/<name>.md`. Append `name` to `REGISTERED_ROLE_NAMES`.
 
-From the user's response, extract:
+### Custom role (`"custom"`)
 
-- **`role-name`** — a short kebab-case identifier (e.g., `backend`, `mobile`, `devops`, `data-eng`). If the user explicitly named the role, use that (normalised to kebab-case). Otherwise infer from the description. If genuinely ambiguous, ask ONE short clarifying question: *"What should I call this role in shorthand?"*
+1. Ask:
 
-- **`owns`** — bullet list of what the role is responsible for.
+> Tell me about this custom role.
+>
+> Cover three things:
+> - **What it does**
+> - **What it doesn't do**
+> - **Anything else** — stack, hours, preferences
 
-- **`does-not-own`** — bullet list of what the role explicitly avoids. If the user didn't address this, ASK ONCE: *"You didn't say what this role doesn't do — that's the field that prevents misrouting. What's outside its scope?"* If they decline, write `- (not specified)` as the single bullet.
+2. Parse the response into `role-name` (kebab-case), `owns`, `does-not-own` (ask once if missing), `notes`.
 
-- **`notes`** — anything from the response that didn't fit into the above. May be empty.
+3. Run the conflict check (Step 5b).
 
-Now **conflict-check semantically** against the existing role profiles from step 2:
-
-1. **Name collision** — a `<role-name>.md` already exists. Show its current content and ask whether the user is updating that role (overwrite is fine), whether this should be a different name, or whether to abort.
-
-2. **Semantic duplicate** — a different filename but `Owns` lists overlap heavily. Show both profiles and ask: *"These look like the same role under different names. Are they? If so, which name should we keep?"*
-
-3. **Responsibility overlap** — the new role's `Owns` includes an item another role also lists in `Owns`. Show the overlap and ask: *"Both `<this-role>` and `<other-role>` claim `<item>`. Which role should actually own it?"* — update the appropriate file with the user's answer.
-
-If any of these surface, resolve with the user before continuing.
-
-## Step 5 — Show the proposed role profile
-
-Format the parsed content as Markdown using this exact structure (omit the `Notes` section entirely if `notes` is empty):
+4. Format markdown:
 
 ```
 # <role-name>
 
 ## Owns
 - <bullet>
-- <bullet>
 
 ## Does not own
 - <bullet>
-- <bullet>
 
 ## Notes
-<free-form notes>
+<notes if any, otherwise omit the Notes section entirely>
 ```
 
-Print the proposed file and ask:
+5. Show with the yes/edit/skip prompt. On yes, write to `<PROJECT_PATH>/_roles/<role-name>.md` and append to `REGISTERED_ROLE_NAMES`.
 
-> This is how the role will appear to paired machines. Look right?
->
-> - reply **yes** to write it
-> - reply **edit** and tell me what to change
-> - reply **cancel** to abort without writing anything
+### Step 5b — Conflict check (run inline within Step 5 per role)
 
-If they say *edit*, ask what to change, revise, show again. Loop until yes or cancel.
+Compare the role-name being written against existing profiles:
 
-If they say *cancel*, STOP without writing anything.
+1. **Name collision** — `<role-name>.md` exists. Show its content. Ask whether to update (overwrite OK), rename, or skip.
+2. **Semantic duplicate** — different filename, `Owns` overlaps heavily. Show both. Ask which is canonical.
+3. **Responsibility overlap** — `Owns` claims something another role also claims. Ask which should own it.
 
-## Step 6 — Write the role file
+If unresolved, skip writing this role; continue to next.
 
-Once confirmed, write the role profile to `<project-path>/_roles/<role-name>.md` with the exact markdown from step 5.
+## Step 6 — Register roles in config
 
-## Step 7 — Tell the user what's next
+Skip if `REGISTERED_ROLE_NAMES` is empty.
 
-Print exactly this template (substituting the real values):
+Build a Bash command that passes one `--role <name>` per role. Substitute `<ACTIVE_PROJECT>` and each `<ROLE>` before invoking:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/register-role-in-config.sh" --project "<ACTIVE_PROJECT>" --role "<ROLE_1>" --role "<ROLE_2>"
+```
+
+The script prints `REGISTERED_ROLES=<comma-separated>`. If it errors, surface and STOP.
+
+## Step 7 — Offer to drop a project marker in cwd
+
+Skip this entire step if `ACTIVE_PROJECT` came from `CODESYNC_PROJECT` or from an already-existing marker (Step 1 succeeded) — the user is already attached.
+
+Otherwise (the project came from the picker in Step 2), offer the marker. Default to **yes**, but guard against general-purpose dirs.
+
+Determine the current working directory (`$PWD` / `pwd`). If it matches any of:
+- `$HOME` exactly
+- `/tmp`, `/var/tmp`
+- `/` (root)
+- a parent of one of the above
+
+then default the prompt to **no** and prepend a warning. Otherwise default to **yes**.
+
+Print one of these:
+
+**Safe cwd (default yes):**
 
 ```
-✓ Role '<role-name>' registered in project '<project-name>'.
+Drop a project marker in <cwd>?
 
-  Role profile:  <project-path>/_roles/<role-name>.md
+This writes a small .codesync/project.json so future terminals launched
+from <cwd> (or any subdirectory) auto-resolve to '<ACTIVE_PROJECT>' — no
+need to export CODESYNC_PROJECT every time.
 
-To activate this role in a terminal, exit Claude Code and run in your shell:
+  [yes] / no
+```
 
-    export CODESYNC_ROLE=<role-name>
+**Guarded cwd (default no, warn):**
 
-(If CODESYNC_PROJECT isn't already set, also: export CODESYNC_PROJECT=<project-name>)
+```
+You're in <cwd> — that's a general-purpose directory. Dropping a project
+marker here would make EVERY terminal launched from <cwd> auto-resolve to
+'<ACTIVE_PROJECT>', which is usually not what you want.
 
-Then re-open Claude Code. /codesync-status will confirm both project and role are active.
+If you have a dedicated code directory for this project, cd there first
+and run /codesync-project-attach <ACTIVE_PROJECT>.
 
-Each terminal can act as a different project+role combo. See the README for
-the `cs` wrapper function that activates both in one go.
+Drop the marker here anyway?
+
+  yes / [no]
+```
+
+If user accepts (yes — including just pressing enter on the default-yes case), run:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/attach-project.sh" --project "<ACTIVE_PROJECT>"
+```
+
+(Optionally include `--role "<PRIMARY_ROLE>"` — the first entry in `REGISTERED_ROLE_NAMES` — as the marker's `default_role`. Skip the role flag if `REGISTERED_ROLE_NAMES` is empty.)
+
+The script will refuse to overwrite an existing marker without `--force` — if that happens, tell the user the marker is already there and don't proceed.
+
+If the user declines: don't run the script; print one line: *"OK — to attach later, cd into your project's code directory and run /codesync-project-attach <ACTIVE_PROJECT>."*
+
+## Step 8 — Tell the user what's next
+
+Pick the FIRST role in `REGISTERED_ROLE_NAMES` as `PRIMARY_ROLE` for the activation hint.
+
+If `REGISTERED_ROLE_NAMES` is empty, print:
+
+```
+No roles were registered (everything was skipped). Re-run /codesync-role-new whenever you're ready.
+```
+
+and STOP.
+
+Otherwise print:
+
+```
+✓ Registered N role(s) in project '<ACTIVE_PROJECT>':
+    - <ROLE_1>   →  <PROJECT_PATH>/_roles/<ROLE_1>.md
+    - <ROLE_2>   →  <PROJECT_PATH>/_roles/<ROLE_2>.md
+    (etc.)
+
+To activate in THIS terminal, exit Claude Code and run in your shell:
+
+    export CODESYNC_PROJECT=<ACTIVE_PROJECT>
+    export CODESYNC_ROLE=<PRIMARY_ROLE>
+
+(Or: cs <ACTIVE_PROJECT> <PRIMARY_ROLE> — see the README for the wrapper.)
+
+Your post-turn inbox check and session-start summary will surface messages
+addressed to ANY of your registered roles, regardless of which CODESYNC_ROLE
+is active in the terminal.
+```
+
+If a marker was dropped in Step 7, append one more line:
+
+```
+A project marker was written to <cwd>/.codesync/project.json — future
+terminals launched from this directory will auto-resolve to this project.
 ```
 
 ## Constraints
 
-- Never modify files outside the active project's directory (specifically `<project-path>/_roles/`).
-- Never write the role file without showing it and getting explicit confirmation.
-- If a conflict was raised and the user didn't resolve it, STOP.
-- Do not edit any plugin files from this command.
-- Do not touch `~/.config/codesync/config.json` — roles aren't stored there.
+- Never modify files outside the active project's directory and `~/.config/codesync/`.
+- Never write a role file without explicit confirmation per role.
+- If a conflict was raised in Step 5b and the user didn't resolve it, skip that role — don't write.
+- Do not edit any plugin scripts from this command.
+- For the marker prompt: NEVER drop a marker without an explicit user yes. The guarded-cwd case must default to "no" even on a bare enter.

@@ -6,7 +6,9 @@
 # - Silent if nothing changed.
 # - Silent on errors.
 # - First run for a given project establishes a baseline without surfacing.
-# - Role-filters when CODESYNC_ROLE is set: only surfaces _inbox/<role>/ + _roles/.
+# - Role-filters by ALL roles registered for this device in the active project
+#   (from config.projects.<name>.roles). Falls back to CODESYNC_ROLE if the
+#   roles list is empty/missing (backward compat). Then to no filter.
 
 CFG_FILE="$HOME/.config/codesync/config.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -41,6 +43,18 @@ try:
     proj_path = project.get("path", "")
     if not proj_path or not os.path.isdir(proj_path):
         sys.exit(0)
+
+    # Determine which roles to filter by:
+    #   1. projects.<name>.roles list (this device's registered roles) — preferred
+    #   2. CODESYNC_ROLE env var (backward compat for older configs)
+    #   3. None → show all changes unfiltered
+    registered_roles = project.get("roles", []) or []
+    if registered_roles:
+        filter_roles = list(registered_roles)
+    elif active_role:
+        filter_roles = [active_role]
+    else:
+        filter_roles = []  # no filter
 
     baseline_path = os.path.expanduser(
         f"~/.config/codesync/baseline-{active_project}.json"
@@ -81,12 +95,13 @@ try:
     changed   = [p for p in current if p in baseline and current[p] > baseline[p]]
     deleted   = [p for p in baseline if p not in current]
 
-    if active_role:
-        inbox_prefix   = f"_inbox/{active_role}/"
-        archive_prefix = f"_archive/{active_role}/"
+    # Build relevance check: any registered-role inbox/archive, plus _roles/
+    if filter_roles:
+        inbox_prefixes   = tuple(f"_inbox/{r}/" for r in filter_roles)
+        archive_prefixes = tuple(f"_archive/{r}/" for r in filter_roles)
         def relevant(p):
-            return (p.startswith(inbox_prefix)
-                    or p.startswith(archive_prefix)
+            return (p.startswith(inbox_prefixes)
+                    or p.startswith(archive_prefixes)
                     or p.startswith("_roles/"))
         suppressed = sum(1 for ps in (new_files, changed, deleted) for p in ps if not relevant(p))
         new_files = [p for p in new_files if relevant(p)]
@@ -97,18 +112,27 @@ try:
 
     def label(p):
         is_archive = p.startswith("_archive/")
+        # Identify the role this file belongs to (for multi-role surfacing)
+        addressed_to = ""
+        if p.startswith("_inbox/") or p.startswith("_archive/"):
+            parts = p.split("/", 2)
+            if len(parts) >= 2:
+                addressed_to = parts[1]
         fm = read_frontmatter_from_file(os.path.join(proj_path, p))
         if not fm:
-            return f"[archived] {p}" if is_archive else p
+            base = f"[archived] {p}" if is_archive else p
+            return f"[→{addressed_to}] {base}" if (addressed_to and len(filter_roles) > 1) else base
         status = fm.get("status", "")
         title  = fm.get("title", "")
         frm    = fm.get("from", "")
-        parts = []
-        if is_archive: parts.append("[archived]")
-        if status:     parts.append(f"[{status}]")
-        if title:      parts.append(title)
-        if frm:        parts.append(f"(from {frm})")
-        prefix = " ".join(parts) if parts else ""
+        parts2 = []
+        if is_archive: parts2.append("[archived]")
+        if addressed_to and len(filter_roles) > 1:
+            parts2.append(f"[→{addressed_to}]")
+        if status:     parts2.append(f"[{status}]")
+        if title:      parts2.append(title)
+        if frm:        parts2.append(f"(from {frm})")
+        prefix = " ".join(parts2) if parts2 else ""
         return f"{prefix}  {p}" if prefix else p
 
     items  = [f"+ {label(p)}" for p in sorted(new_files)]
@@ -118,7 +142,13 @@ try:
     if not items and suppressed == 0:
         sys.exit(0)
 
-    role_label = f"role={active_role}" if active_role else "no role active"
+    if filter_roles:
+        if len(filter_roles) == 1:
+            role_label = f"role={filter_roles[0]}"
+        else:
+            role_label = f"roles={','.join(filter_roles)}"
+    else:
+        role_label = "no role active"
     header = f"[codesync project={active_project}, {role_label}]"
     if items:
         print()
@@ -127,8 +157,9 @@ try:
             print(f"  {line}")
         if len(items) > 10:
             print(f"  …and {len(items) - 10} more")
-        if suppressed and active_role:
-            print(f"  ({suppressed} other change(s) outside _inbox/{active_role}/ — not for this role)")
+        if suppressed and filter_roles:
+            joined = "/".join(filter_roles)
+            print(f"  ({suppressed} other change(s) outside _inbox/{{{joined}}}/ — not for your registered role(s))")
 
 except Exception:
     pass
