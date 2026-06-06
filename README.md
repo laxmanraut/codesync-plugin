@@ -255,8 +255,8 @@ Roles aren't restricted to one status convention — same `to`-role can receive 
 
 | Command | What it does |
 |---|---|
-| `/codesync-thread-new` | Interactive — asks who the thread is for, what status, what title, what body. Writes the file with frontmatter into the right inbox. |
-| `/codesync-thread-list` | Lists threads in the active role's inbox, with status + title + sender + age. `--all` shows every role's inbox. `--status <s>` filters by status. `--archive` lists archived threads, `--include-archive` shows both. |
+| `/codesync-thread-new` | Interactive — asks who the thread is for, what status, what title, what body. Writes the file with frontmatter into the right inbox. Offers a project picker (existing + "New project") if no project is active in the terminal. |
+| `/codesync-thread-list` | Lists threads in the active role's inbox, with status + title + sender + age. `--all` shows every role's inbox. `--status <s>` filters by status. `--archive` lists archived threads, `--include-archive` shows both. Offers a project picker (existing only) if no project is active. |
 | `/codesync-thread-reply <slug>` | Creates a reply file addressed back to the original thread's sender, with `replies-to` set automatically. |
 | `/codesync-thread-set-status <slug> <status>` | Moves a thread between `todo` / `wip` / `done` / `blocked` / `note` without opening the file. Atomic rewrite of the status field only. |
 | `/codesync-thread-archive <slug>` | Moves a resolved or stale thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved. |
@@ -341,16 +341,16 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 
 | Command | What it does |
 |---|---|
-| `/install-codesync` | First-time setup: Syncthing, first project, first role. |
+| `/install-codesync` | First-time setup: Syncthing, plus a project picker (existing or new) and a role picker (12 predefined roles with templates, multi-select for hybrid). |
 | `/codesync-project-new` | Register an additional project. |
 | `/codesync-project-list` | List all projects on this machine; mark the active one. |
 | `/codesync-project-invite --peer <id> [--as-introducer]` | Invite an existing peer to the active project. Pass `--as-introducer` to let them introduce other peers automatically (3+ user teams). |
 | `/codesync-project-attach <project> [<role>]` | Drop a `.codesync/project.json` marker in the current dir so terminals launched here auto-resolve the project. |
 | `/codesync-pair --peer <id> [--as-introducer]` | Pair a brand-new peer at the device level and invite them to the active project in one step. Pass `--as-introducer` for the introducer pattern (see "Teams of 3+" above). |
-| `/codesync-role-new` | Register a role in the active project (or update an existing one). |
+| `/codesync-role-new` | Register one OR MORE roles (hybrid supported) in a project. Numbered picker of 12 predefined roles + "Custom"; each pick has a starter template you can edit. Offers a project picker (existing + "New project") if none is active, then offers to drop a `.codesync/project.json` marker in the current directory. |
 | `/codesync-role-list` | List roles in the active project; mark the active one. |
-| `/codesync-thread-new` | Start a new thread (note / task / decision / question) addressed to another role. |
-| `/codesync-thread-list` | List threads in your role's inbox (or all inboxes with `--all`); filter by status. |
+| `/codesync-thread-new` | Start a new thread (note / task / decision / question) addressed to another role. Offers project + role pickers if either is unset in the terminal. |
+| `/codesync-thread-list` | List threads in your role's inbox (or all inboxes with `--all`); filter by status. Offers a project picker if none active. |
 | `/codesync-thread-reply <slug>` | Reply to an existing thread; auto-addresses the reply back to the original sender. |
 | `/codesync-thread-set-status <slug> <status>` | Move a thread between `todo` / `wip` / `done` / `blocked` / `note` without hand-editing. |
 | `/codesync-thread-archive <slug>` | Move a thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved, just out of default views. |
