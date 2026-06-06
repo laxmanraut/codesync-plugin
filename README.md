@@ -1,10 +1,48 @@
 # codesync
 
-A Claude Code plugin for coordinating work between AI-augmented collaborators across machines — no cloud service, no central server.
+**A way for two (or more) people to collaborate through Claude Code without a server, a cloud account, or a shared login.**
 
-The mental model: each **project** is a peer-to-peer synced folder. Inside each project, work is **role-addressed** — backend, frontend, mobile, devops, whatever fits — via per-role inbox folders. Notes, tasks, design discussions, decisions, and questions flow through those inboxes, and Claude agents on each machine read and write them on behalf of their human. Each terminal picks one project + role, so the same laptop can act as different roles in different terminals — even across different projects.
+codesync sets up a folder on both your laptops that stays in sync — write something on yours, it appears on theirs within seconds. Write something on theirs, it appears on yours.
 
-Backed by [Syncthing](https://syncthing.net) for the actual peer-to-peer sync. Anything you write to a project folder ends up on your collaborator's machine within seconds (LAN) or minutes (over the internet). Anything they write ends up on yours.
+Inside that folder, work is sorted by **job role** (backend, frontend, mobile, devops, whatever fits your team). Each person's Claude Code knows which colleague does what, so when it has a task, a question, or a design note for someone else, it drops a file in that person's inbox. The other person's Claude finds it there on their next turn.
+
+## How it works
+
+```
+    Your Mac                              Colleague's Mac
+  ┌────────────┐                        ┌────────────┐
+  │ Claude     │                        │ Claude     │
+  │ Code       │                        │ Code       │
+  └─────┬──────┘                        └──────┬─────┘
+        │  writes a task                       │  reads it,
+        │  for "frontend"                      │  replies back
+        ▼                                      ▼
+  ┌─────────────────┐                    ┌─────────────────┐
+  │ ~/codesync/     │   shared folder    │ ~/codesync/     │
+  │   lead_inbox/   │ ◄────────────────► │   lead_inbox/   │
+  │     _inbox/     │      (Syncthing    │     _inbox/     │
+  │       backend/  │      keeps both    │       backend/  │
+  │       frontend/ │       in sync)     │       frontend/ │
+  └─────────────────┘                    └─────────────────┘
+         you                                 colleague
+    (role: backend)                       (role: frontend)
+```
+
+The shared folder lives on both laptops at once. A small free tool called [Syncthing](https://syncthing.net) runs quietly in the background on each machine and keeps the two copies mirrored — no central server, no third-party account, no one's cloud storage. On the same Wi-Fi, changes show up within seconds. Across the internet, usually within a minute. If one laptop is offline, sync just waits and catches up when it comes back.
+
+Each terminal you open picks one **project** (e.g. `lead_inbox`, `mobile-app`) and one **role** (e.g. `backend`, `frontend`). The same laptop can be different roles in different terminals without anything getting mixed up. You can also have multiple projects on the same laptop; each gets its own shared folder and its own collaborators.
+
+### What this is good for
+
+- **Two-person products**: one person on backend, one on frontend, each with their own Claude Code session. Tasks, design questions, and "I'm done, here's how it works" notes flow between them with no server in the middle.
+- **Small teams (3–5 people)**: same idea, plus a built-in "introducer" pattern so a new teammate only needs to connect to one existing person, not everyone (see the *Teams of 3+* section below).
+- **A coordinator + specialists**: one person plays a coordinator role across multiple projects, others specialize.
+
+### What this is not
+
+- **Not a chat app.** Files flow between Claude sessions, not between humans typing in real time.
+- **Not a replacement for git.** Code still goes in version control. codesync is for the *coordination layer* on top — tasks, design notes, decisions, "is the API ready" pings.
+- **Not cloud-based.** No account to sign up for, no monthly bill, no data sitting on someone else's server.
 
 ## Requirements
 
