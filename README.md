@@ -237,10 +237,15 @@ Two pieces, working together, make every collaborator's Claude aware of project-
 
 **`CLAUDE.md`** is dropped at the project root by `/install-codesync` and `/codesync-project-new`. Claude Code natively auto-loads any file named `CLAUDE.md` in the working directory or any ancestor — no plugin involvement needed for the loading itself. The starter template explains the folder layout, points the agent at `_docs/` for project-specific questions, and lists the slash commands the team uses. Edit it to add project-specific instructions (vocabulary, ways of working, "always check X before doing Y") and every collaborator's Claude picks them up after the next Syncthing sync.
 
-**How agents reference docs automatically:**
-- The session-start hook prints a one-line index of files in `_docs/` (filename + first heading) so agents know what exists.
-- `CLAUDE.md` is loaded into every Claude Code session that starts in or near the project folder — telling agents to consult `_docs/` whenever relevant.
-- Combined: agents have an index in context plus a standing instruction to consult `_docs/`. They reach for it without being explicitly told.
+**How agents reference docs automatically — two layers, working together:**
+
+1. **Native CLAUDE.md loading** (preferred path). If your Claude session's working directory is *inside* the synced project folder (`~/codesync/<project>/`), Claude Code's built-in CLAUDE.md mechanism walks up and auto-loads the file — no plugin involvement needed.
+
+2. **SessionStart hook fallback** (for typical workflows). Most users work from their **code repository** (e.g. `~/code/<app>/`), not from inside the synced folder. The synced CLAUDE.md is invisible to Claude Code's native loader in that case, because it only walks UP from cwd. To fix this, the SessionStart hook detects when your cwd is outside the synced project and **injects the CLAUDE.md content** into the session — so the agent has project context regardless of where you launched from.
+
+   The hook also lists `_docs/` filenames (with first heading) so agents know what reference docs exist without reading them all into context.
+
+3. **For the cleanest experience** (combines both layers): run `/codesync-project-attach <project>` inside your code directory. It writes a `.codesync/project.json` marker so terminals launched here auto-detect the project, AND it offers to drop a `CLAUDE.md` symlink pointing at the synced version. With the symlink in place, Claude Code's native loader picks up the synced CLAUDE.md directly (no hook injection needed), and any update from a collaborator flows through automatically.
 
 Edit conflicts: Syncthing is last-write-wins. If two collaborators edit the same doc at the same time, both versions are preserved under `.stversions/` for recovery — no automatic merge.
 
@@ -368,7 +373,7 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 | `/codesync-project-new` | Register an additional project. |
 | `/codesync-project-list` | List all projects on this machine; mark the active one. |
 | `/codesync-project-invite --peer <id> [--as-introducer]` | Invite an existing peer to the active project. Pass `--as-introducer` to let them introduce other peers automatically (3+ user teams). |
-| `/codesync-project-attach <project> [<role>]` | Drop a `.codesync/project.json` marker in the current dir so terminals launched here auto-resolve the project. |
+| `/codesync-project-attach <project> [<role>]` | Drop a `.codesync/project.json` marker in the current dir so terminals launched here auto-resolve the project. Also offers to symlink the project's `CLAUDE.md` into the directory so Claude Code natively auto-loads project context. |
 | `/codesync-pair --peer <id> [--as-introducer]` | Pair a brand-new peer at the device level and invite them to the active project in one step. Pass `--as-introducer` for the introducer pattern (see "Teams of 3+" above). |
 | `/codesync-role-new` | Register one OR MORE roles (hybrid supported) in a project. Numbered picker of 12 predefined roles + "Custom"; each pick has a starter template you can edit. Offers a project picker (existing + "New project") if none is active, then offers to drop a `.codesync/project.json` marker in the current directory. |
 | `/codesync-role-list` | List roles in the active project; mark the active one. |

@@ -257,10 +257,12 @@ Drop the marker here anyway?
 If user accepts (yes — including just pressing enter on the default-yes case), run:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/attach-project.sh" --project "<ACTIVE_PROJECT>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/attach-project.sh" --project "<ACTIVE_PROJECT>" --link-claude-md
 ```
 
 (Optionally include `--role "<PRIMARY_ROLE>"` — the first entry in `REGISTERED_ROLE_NAMES` — as the marker's `default_role`. Skip the role flag if `REGISTERED_ROLE_NAMES` is empty.)
+
+`--link-claude-md` tells the attach script to also symlink the project's `CLAUDE.md` into the current directory so Claude Code's native CLAUDE.md mechanism auto-loads project context. It's a no-op if cwd already has a CLAUDE.md (user files aren't clobbered) or if the project doesn't have a CLAUDE.md yet.
 
 The script will refuse to overwrite an existing marker without `--force` — if that happens, tell the user the marker is already there and don't proceed.
 

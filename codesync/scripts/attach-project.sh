@@ -4,9 +4,14 @@
 # detect this project, without needing CODESYNC_PROJECT in the shell.
 #
 # Args:
-#   --project <name>   (required) must exist in ~/.config/codesync/config.json
-#   --role <name>      (optional) default role for terminals starting from here;
-#                       still overrideable per-terminal via CODESYNC_ROLE.
+#   --project <name>      (required) must exist in ~/.config/codesync/config.json
+#   --role <name>         (optional) default role for terminals starting from here;
+#                          still overrideable per-terminal via CODESYNC_ROLE.
+#   --link-claude-md      (optional) also symlink the project's CLAUDE.md into cwd
+#                          so Claude Code's native CLAUDE.md mechanism auto-loads
+#                          project context. No-op if cwd already has CLAUDE.md.
+#   --force               overwrite existing marker (and the CLAUDE.md symlink
+#                          if --link-claude-md is also passed).
 #
 # Refuses to overwrite an existing marker without --force.
 
@@ -20,11 +25,13 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 PROJECT=""
 ROLE=""
 FORCE="no"
+LINK_CLAUDE_MD="no"
 while [ $# -gt 0 ]; do
   case "$1" in
-    --project) [ $# -ge 2 ] || err "--project requires a value"; PROJECT="$2"; shift 2 ;;
-    --role)    [ $# -ge 2 ] || err "--role requires a value";    ROLE="$2";    shift 2 ;;
-    --force)   FORCE="yes"; shift ;;
+    --project)         [ $# -ge 2 ] || err "--project requires a value"; PROJECT="$2"; shift 2 ;;
+    --role)            [ $# -ge 2 ] || err "--role requires a value";    ROLE="$2";    shift 2 ;;
+    --force)           FORCE="yes"; shift ;;
+    --link-claude-md)  LINK_CLAUDE_MD="yes"; shift ;;
     *) shift ;;
   esac
 done
@@ -66,7 +73,40 @@ PY
 
 log "Wrote $MARKER_FILE"
 
+# Optionally symlink the synced project's CLAUDE.md into cwd so Claude Code's
+# native CLAUDE.md mechanism picks it up automatically.
+LINKED_CLAUDE_MD=""
+if [ "$LINK_CLAUDE_MD" = "yes" ]; then
+  # Look up the project path from config
+  PROJ_PATH=$(python3 -c '
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+p = cfg.get("projects", {}).get(sys.argv[2])
+print(p["path"] if p else "")
+' "$CFG_FILE" "$PROJECT")
+  SRC_CLAUDE_MD="$PROJ_PATH/CLAUDE.md"
+  DST_CLAUDE_MD="$(pwd)/CLAUDE.md"
+
+  if [ -z "$PROJ_PATH" ] || [ ! -f "$SRC_CLAUDE_MD" ]; then
+    log "Skipped CLAUDE.md symlink: project has no CLAUDE.md yet at $SRC_CLAUDE_MD (re-run /install-codesync to scaffold)."
+  elif [ -e "$DST_CLAUDE_MD" ] && [ "$FORCE" != "yes" ]; then
+    # Already a CLAUDE.md here — don't clobber user's own
+    if [ -L "$DST_CLAUDE_MD" ]; then
+      log "Skipped CLAUDE.md symlink: $DST_CLAUDE_MD already exists as a symlink (leave alone, or pass --force to refresh)."
+    else
+      log "Skipped CLAUDE.md symlink: $DST_CLAUDE_MD already exists (user file, not touched)."
+    fi
+  else
+    # Safe to create / refresh symlink
+    [ -e "$DST_CLAUDE_MD" ] && rm -f "$DST_CLAUDE_MD"
+    ln -s "$SRC_CLAUDE_MD" "$DST_CLAUDE_MD"
+    LINKED_CLAUDE_MD="$DST_CLAUDE_MD"
+    log "Symlinked $DST_CLAUDE_MD -> $SRC_CLAUDE_MD"
+  fi
+fi
+
 printf '\n'
 printf 'ATTACHED=%s\n' "$MARKER_FILE"
 printf 'PROJECT=%s\n' "$PROJECT"
 [ -n "$ROLE" ] && printf 'DEFAULT_ROLE=%s\n' "$ROLE" || printf 'DEFAULT_ROLE=\n'
+printf 'LINKED_CLAUDE_MD=%s\n' "$LINKED_CLAUDE_MD"

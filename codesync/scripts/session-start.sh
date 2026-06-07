@@ -130,8 +130,20 @@ try:
                 pass
             doc_files.append((fn, heading))
 
-    # Silent only if BOTH inbox is empty AND no docs to surface
-    if total == 0 and not doc_files:
+    # Determine whether we'll need to inject CLAUDE.md (only when cwd isn't
+    # inside the synced project folder — otherwise native loading covers it).
+    cwd_real = os.path.realpath(os.getcwd())
+    proj_real = os.path.realpath(proj_path)
+    cwd_is_inside_project = (
+        cwd_real == proj_real or cwd_real.startswith(proj_real + os.sep)
+    )
+    claude_md_path = os.path.join(proj_path, "CLAUDE.md")
+    will_inject_claude_md = (
+        os.path.isfile(claude_md_path) and not cwd_is_inside_project
+    )
+
+    # Silent only if inbox empty AND no docs AND no CLAUDE.md to inject
+    if total == 0 and not doc_files and not will_inject_claude_md:
         sys.exit(0)
 
     # Header
@@ -193,6 +205,30 @@ try:
             else:
                 print(f"    - {fn}")
         print("  (Run /codesync-doc-list for details.)")
+
+    # Inject project CLAUDE.md content as fallback context.
+    # Native Claude Code CLAUDE.md loading only walks UP from cwd. For users
+    # whose cwd is OUTSIDE the synced project folder (e.g. ~/code/<app>/),
+    # the synced CLAUDE.md at <proj_path>/CLAUDE.md is invisible to the
+    # native loader. We surface it here so it ends up in session context
+    # regardless of cwd. Skip when cwd is inside proj_path (native loading
+    # is already handling it) to avoid duplicate context.
+    if will_inject_claude_md:
+        try:
+            with open(claude_md_path) as f:
+                claude_content = f.read().rstrip()
+        except OSError:
+            claude_content = ""
+        if claude_content:
+            print()
+            print(f"  ─── Project CLAUDE.md (from {claude_md_path}) ───")
+            print("  (auto-included because your cwd isn't inside the synced project folder;")
+            print("   treat as if Claude Code had loaded it natively)")
+            print()
+            for line in claude_content.splitlines():
+                print(f"  {line}" if line else "")
+            print()
+            print("  ─── end CLAUDE.md ───")
 
 except Exception:
     pass  # never let the hook break a session start
