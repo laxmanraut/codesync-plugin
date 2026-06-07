@@ -105,8 +105,33 @@ try:
     per_role = {role: scan_inbox(role) for role in roles_to_show}
     total = sum(len(es) for es in per_role.values())
 
-    if total == 0:
-        # Every inbox empty — silent
+    # Scan project docs (separate from inbox; surfaces even with empty inbox)
+    import re as _re
+    docs_dir = os.path.join(proj_path, "_docs")
+    doc_files = []
+    if os.path.isdir(docs_dir):
+        for fn in sorted(os.listdir(docs_dir)):
+            if not fn.endswith(".md") or fn == "README.md":
+                continue
+            full = os.path.join(docs_dir, fn)
+            if not os.path.isfile(full):
+                continue
+            heading = None
+            try:
+                with open(full) as f:
+                    for line in f:
+                        m = _re.match(r'^#\s+(.*)', line.rstrip())
+                        if m:
+                            heading = m.group(1).strip()
+                            break
+                        if line.strip() and not line.startswith('#'):
+                            break
+            except OSError:
+                pass
+            doc_files.append((fn, heading))
+
+    # Silent only if BOTH inbox is empty AND no docs to surface
+    if total == 0 and not doc_files:
         sys.exit(0)
 
     # Header
@@ -153,8 +178,21 @@ try:
         if len(entries) > per_role_top:
             print(f"    …and {len(entries) - per_role_top} more")
 
-    print()
-    print("  Run /codesync-thread-list to see them, or /codesync-thread-reply <slug> to respond.")
+    if total > 0:
+        print()
+        print("  Run /codesync-thread-list to see them, or /codesync-thread-reply <slug> to respond.")
+
+    # Surface project docs index (already scanned above)
+    if doc_files:
+        print()
+        print(f"  Project docs ({len(doc_files)}) — read any with Claude when relevant:")
+        name_w = max(8, max(len(fn) for fn, _ in doc_files))
+        for fn, heading in doc_files:
+            if heading:
+                print(f"    - {fn:<{name_w}}  — {heading}")
+            else:
+                print(f"    - {fn}")
+        print("  (Run /codesync-doc-list for details.)")
 
 except Exception:
     pass  # never let the hook break a session start

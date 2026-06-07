@@ -212,16 +212,39 @@ If you already paired with the introducer normally and want to upgrade, just rer
 
 ```
 ~/codesync/<project>/
+├── CLAUDE.md                # project context, auto-loaded by Claude Code
 ├── _roles/                  # role definitions for this project
 │   ├── backend.md
 │   ├── frontend.md
 │   └── README.md
-└── _inbox/                  # role-addressed content
-    ├── backend/             # things addressed TO backend in this project
-    └── frontend/            # things addressed TO frontend in this project
+├── _inbox/                  # role-addressed content
+│   ├── backend/             # things addressed TO backend in this project
+│   └── frontend/            # things addressed TO frontend in this project
+└── _docs/                   # project-wide reference docs (shared with all roles)
+    ├── ARCHITECTURE.md
+    ├── CONVENTIONS.md
+    ├── GLOSSARY.md
+    └── README.md
 ```
 
 When you have content for another role, drop it under `_inbox/<their-role>/`. When they reply, they drop it under `_inbox/<your-role>/`.
+
+## Project-wide docs (`_docs/`) and `CLAUDE.md` auto-loading
+
+Two pieces, working together, make every collaborator's Claude aware of project-wide context without anyone having to say "read the docs":
+
+**`_docs/`** is a free-form directory of markdown reference files — architecture notes, conventions, glossary, decisions log, anything every collaborator should be able to read. Files sync to all paired peers within seconds. Create files by hand or with Claude; no slash command needed for creation. `/codesync-doc-list` shows what's there.
+
+**`CLAUDE.md`** is dropped at the project root by `/install-codesync` and `/codesync-project-new`. Claude Code natively auto-loads any file named `CLAUDE.md` in the working directory or any ancestor — no plugin involvement needed for the loading itself. The starter template explains the folder layout, points the agent at `_docs/` for project-specific questions, and lists the slash commands the team uses. Edit it to add project-specific instructions (vocabulary, ways of working, "always check X before doing Y") and every collaborator's Claude picks them up after the next Syncthing sync.
+
+**How agents reference docs automatically:**
+- The session-start hook prints a one-line index of files in `_docs/` (filename + first heading) so agents know what exists.
+- `CLAUDE.md` is loaded into every Claude Code session that starts in or near the project folder — telling agents to consult `_docs/` whenever relevant.
+- Combined: agents have an index in context plus a standing instruction to consult `_docs/`. They reach for it without being explicitly told.
+
+Edit conflicts: Syncthing is last-write-wins. If two collaborators edit the same doc at the same time, both versions are preserved under `.stversions/` for recovery — no automatic merge.
+
+**For projects created before v0.14:** re-run `/install-codesync` and pick your existing project from the picker. The seeder is idempotent — it only adds the missing files (`_docs/` directory, `_docs/README.md`, `CLAUDE.md`) and leaves anything already in place.
 
 ## Threads — structured notes, tasks, and replies
 
@@ -355,6 +378,7 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 | `/codesync-thread-set-status <slug> <status>` | Move a thread between `todo` / `wip` / `done` / `blocked` / `note` without hand-editing. |
 | `/codesync-thread-archive <slug>` | Move a thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved, just out of default views. |
 | `/codesync-thread-unarchive <slug>` | Reverse of archive — bring an archived thread back into the active inbox. |
+| `/codesync-doc-list` | List project-wide docs in `_docs/` — filename + first heading + size. Read-only; ask Claude to read any specific doc afterwards. |
 | `/codesync-statusline-setup` | Install codesync's status-line segment (shows `codesync ▴ N new` in Claude Code's bottom bar when there are unread items). Backs up settings.json. |
 | `/codesync-statusline-teardown` | Remove codesync's status-line segment; restore prior statusLine. |
 | `/codesync-status` | Active project + role, Syncthing health, peers attached to the active project, folder sync state, registered roles. |

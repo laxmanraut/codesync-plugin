@@ -1,7 +1,7 @@
 ---
 description: One-time setup — install Syncthing on this machine and register a first project + role(s)
 argument-hint: "(no arguments — interactive)"
-allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/install-syncthing.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/migrate-v0.5.0.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/create-project.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-role-in-config.sh:*)", "Bash(python3:*)"]
+allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/install-syncthing.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/migrate-v0.5.0.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/create-project.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-role-in-config.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh:*)", "Bash(python3:*)"]
 ---
 
 # Install CodeSync
@@ -49,7 +49,15 @@ If migration IS needed:
 
 5. The script prints `MIGRATED_PROJECT=<name>`, `PROJECT_PATH=<path>`, `FOLDER_ID=<id>`. Capture those.
 6. Set `ACTIVE_PROJECT = <name>`, `PROJECT_PATH = <path>`.
-7. Skip to Step 4 (existing-roles read).
+7. Run the docs seeder (idempotent — only writes files that don't exist):
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh" --project "<ACTIVE_PROJECT>" --path "<PROJECT_PATH>"
+```
+
+It prints `CREATED=<comma-separated list>` of any files added (or empty if everything already existed). Mention to the user what was added (or stay quiet if nothing).
+
+8. Skip to Step 4 (existing-roles read).
 
 If migration is NOT needed, continue to Step 3.
 
@@ -91,6 +99,14 @@ Wait for the user's number. Validate it's in range.
 
 - If they pick an existing project: set `ACTIVE_PROJECT` and `PROJECT_PATH` from config.
 - If they pick "New project": ask for the name (validate as in Case A), then run `create-project.sh --name "<NAME>"`. Capture outputs.
+
+After `ACTIVE_PROJECT` / `PROJECT_PATH` are set (regardless of which sub-case), run the docs seeder (idempotent — only writes files that don't exist):
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh" --project "<ACTIVE_PROJECT>" --path "<PROJECT_PATH>"
+```
+
+The script prints `CREATED=<comma-separated>` of any files it added (`_docs/`, `_docs/README.md`, `CLAUDE.md`). If `CREATED` is non-empty, tell the user briefly: *"Scaffolded project docs: \<list>. The new `CLAUDE.md` is loaded automatically by Claude Code whenever you work in or near this directory — edit it to add project-specific instructions."* If `CREATED` is empty, stay quiet.
 
 ## Step 4 — Read existing role profiles in the active project
 

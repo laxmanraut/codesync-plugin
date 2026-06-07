@@ -77,6 +77,10 @@ Files in this directory are written by `/codesync-role-new` (or by `/install-cod
 README
 fi
 
+# Scaffold _docs/ + CLAUDE.md via the shared seeder (idempotent).
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+bash "$SCRIPT_DIR/seed-project-docs.sh" --project "$PROJECT_NAME" --path "$PROJECT_PATH" >/dev/null
+
 # 7. Refuse if a Syncthing folder with this ID already exists
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
   -H "X-API-Key: $API_KEY" "$API/rest/config/folders/$FOLDER_ID")

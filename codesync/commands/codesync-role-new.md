@@ -1,7 +1,7 @@
 ---
 description: Register one or more role profiles in the active project (or pick a project first if none is active)
 argument-hint: "(no arguments — interactive)"
-allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/create-project.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-role-in-config.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/attach-project.sh:*)", "Bash(python3:*)"]
+allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/create-project.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-role-in-config.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/attach-project.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh:*)", "Bash(python3:*)"]
 ---
 
 # Register CodeSync role(s)
@@ -60,6 +60,16 @@ Wait for the user's number. Validate it's in range. Re-ask on invalid input.
 
 - If they pick an existing project: set `ACTIVE_PROJECT` and `PROJECT_PATH` from config.
 - If they pick "New project": ask for the name (validate as in Case A), then run `create-project.sh --name "<NAME>"`. Capture outputs.
+
+## Step 2b — Backfill project docs scaffold (idempotent)
+
+If the project came from the picker in Step 2 (not from a pre-existing env var or marker), run the docs seeder. It's idempotent — does nothing for projects that already have `_docs/` and `CLAUDE.md`:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh" --project "<ACTIVE_PROJECT>" --path "<PROJECT_PATH>"
+```
+
+The script prints `CREATED=<comma-separated>`. If non-empty, tell the user briefly which files were added (e.g., *"Scaffolded `_docs/` and `CLAUDE.md` for this project."*). If empty, stay quiet.
 
 ## Step 3 — Read existing role profiles in the active project
 
