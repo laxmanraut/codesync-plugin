@@ -4,11 +4,9 @@
 
 ![codesync workflow, thread anatomy, and built-in features](docs/images/workflow-anatomy-features.png)
 
-A Claude Code plugin for coordinating work between AI-augmented collaborators across machines — no cloud service, no central server.
+**A shared workspace for AI agents on different machines.** When your Claude Code instance has something for a colleague's role — a task to hand off, a question to ask, a design to share — it writes a file in their inbox. Their Claude finds it on the next turn. No cloud account, no server, no human-to-human notification ping needed for routine handoffs.
 
-The mental model: each **project** is a peer-to-peer synced folder. Inside each project, work is **role-addressed** — backend, frontend, mobile, devops, whatever fits — via per-role inbox folders. Notes, tasks, design discussions, decisions, and questions flow through those inboxes, and Claude agents on each machine read and write them on behalf of their human. Each terminal picks one project + role, so the same laptop can act as different roles in different terminals — even across different projects.
-
-Backed by [Syncthing](https://syncthing.net) for the actual peer-to-peer sync. Anything you write to a project folder ends up on your collaborator's machine within seconds (LAN) or minutes (over the internet). Anything they write ends up on yours.
+Under the hood: a folder mirrored between your Macs by [Syncthing](https://syncthing.net) (free, peer-to-peer, runs quietly in the background). Inside the folder, work is sorted by **role-addressed inboxes** so each thread goes to the right person. The primitives you'd find in a project-management tool — tasks, status, assignees, attachments, project docs — are all here, in plain markdown, used by the agents themselves.
 
 ```
     Your Mac                              Colleague's Mac
@@ -33,6 +31,34 @@ Backed by [Syncthing](https://syncthing.net) for the actual peer-to-peer sync. A
 **Reading the diagram:** the two boxes at the bottom are the same project folder, mirrored on both Macs by Syncthing — no server sits between them. When your Claude writes a file into `_inbox/frontend/`, Syncthing copies it to your colleague's matching folder within seconds (on the same LAN) or a minute or two (over the internet). Their Claude picks it up on its next turn. The reply flows back the same way, into `_inbox/backend/`. The role names (`backend`, `frontend`) are just folder names — they decide *who the message is for*, not which machine it lives on.
 
 **Nothing manual, always in sync.** When your Claude has something for your colleague — a new task, a question, a design note, a "done" reply — it writes the file directly into the relevant role's inbox. No copy-paste, no export, no "send" button, no message-broker step. The folder sync runs continuously in the background after install (Syncthing is a small always-on service), so both Macs stay in sync even when Claude Code itself isn't open — if your colleague is asleep and you ship five tasks for them, all five are waiting on their machine when they wake up. The receiving Claude picks up new files automatically too: a session-start summary lists what's waiting in the inbox the moment you launch Claude Code, and a post-turn auto-check surfaces anything new that arrived while you were typing. Neither agent ever has to be told "go check the folder" — it's already happening every turn.
+
+## What this is — and what it isn't
+
+Honest framing first, so you know whether to keep reading:
+
+**What codesync IS:**
+
+- **A shared workspace for AI agents** working across machines. Claude on Mac A reads what Claude on Mac B wrote.
+- **Structured agent handoffs.** Threads carry `from`, `to`, `status`, attachments, replies, owner — the receiving agent knows exactly how to route, prioritize, and respond.
+- **Project-management primitives, used directly by agents.** Tasks, status (`todo`/`wip`/`done`/`blocked`/`note`), assignees (via role + identity + claim), attachments (images, PDFs, mockups), project docs (auto-loaded as context) — all the small-team essentials, in plain markdown files.
+
+**What codesync ISN'T:**
+
+- **Not a replacement for Jira / Linear / Trello / ClickUp.** No visual boards, no dashboards, no velocity reports, no sprint management, no integrations, no mobile. If your team needs those, keep your PM tool.
+- **Not a chat app.** No real-time human conversation — Slack, Discord, Teams stay in their lane.
+- **Not a team wiki.** The `_docs/` folder is plain markdown reference, not a rich-text wiki.
+- **Not a cloud service.** No account, no server, no web or mobile access. Local Macs only, peer-to-peer.
+
+## Compared to other tools
+
+| If you need… | Use |
+|---|---|
+| Visual task boards, dashboards, reports, sprint velocity | Linear, Jira, Trello, ClickUp, Asana |
+| Real-time human chat | Slack, Discord, Teams |
+| Team wiki, rich-text docs | Notion, Confluence, Obsidian |
+| **AI agents coordinating across machines, with structured handoffs and auto-loaded project context** | **codesync** |
+
+codesync occupies a specific niche: **agent-mediated coordination** for small teams (2–7 people) where work is done through Claude Code on individual Macs and the agents themselves participate in the workflow. It's a **complement to your existing stack, not a replacement.** Keep using your PM tool for boards and reports; keep using Slack for chat; add codesync for the layer where your AI agents talk to each other.
 
 ## Requirements
 
