@@ -110,6 +110,40 @@ try:
     else:
         suppressed = 0
 
+    # Collapse attachment-file events under their parent thread. When the
+    # frontmatter parser later reads the thread's .md, it picks up the
+    # updated `attachments:` count, so the user sees one event with
+    # [+ N attachments] instead of N+1 separate file lines.
+    import re as _re_attach
+    _attach_re = _re_attach.compile(r'^(_(?:inbox|archive))/([^/]+)/([^/]+)\.attachments/')
+    def _is_attachment(path):
+        return bool(_attach_re.match(path))
+    def _parent_thread(path):
+        m = _attach_re.match(path)
+        if not m:
+            return None
+        root, role, slug = m.groups()
+        return f"{root}/{role}/{slug}.md"
+
+    # Track which threads have implicit changes (attachment-only, .md not changed)
+    explicit_paths = set(new_files) | set(changed) | set(deleted)
+    implicit_threads_changed = set()
+    for p in list(new_files) + list(changed) + list(deleted):
+        if _is_attachment(p):
+            parent = _parent_thread(p)
+            if parent and parent not in explicit_paths and os.path.isfile(os.path.join(proj_path, parent)):
+                implicit_threads_changed.add(parent)
+
+    # Filter out attachment file paths from the three lists
+    new_files = [p for p in new_files if not _is_attachment(p)]
+    changed   = [p for p in changed   if not _is_attachment(p)]
+    deleted   = [p for p in deleted   if not _is_attachment(p)]
+
+    # Surface implicit thread changes (attachment-only) as additional changes
+    for t in sorted(implicit_threads_changed):
+        if t not in explicit_paths:
+            changed.append(t)
+
     def label(p):
         is_archive = p.startswith("_archive/")
         # Identify the role this file belongs to (for multi-role surfacing)
