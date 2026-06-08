@@ -261,7 +261,13 @@ Two pieces, working together, make every collaborator's Claude aware of project-
 
 **`_docs/`** is a free-form directory of markdown reference files — architecture notes, conventions, glossary, decisions log, anything every collaborator should be able to read. Files sync to all paired peers within seconds. Create files by hand or with Claude; no slash command needed for creation. `/codesync-doc-list` shows what's there.
 
-**`CLAUDE.md`** is dropped at the project root by `/install-codesync` and `/codesync-project-new`. Claude Code natively auto-loads any file named `CLAUDE.md` in the working directory or any ancestor — no plugin involvement needed for the loading itself. The starter template explains the folder layout, points the agent at `_docs/` for project-specific questions, and lists the slash commands the team uses. Edit it to add project-specific instructions (vocabulary, ways of working, "always check X before doing Y") and every collaborator's Claude picks them up after the next Syncthing sync.
+**`CLAUDE.md`** is dropped at the project root by `/install-codesync` and `/codesync-project-new`. Claude Code natively auto-loads any file named `CLAUDE.md` in the working directory or any ancestor — no plugin involvement needed for the loading itself. The starter template:
+
+- Explains the folder layout (`_roles/`, `_inbox/`, `_archive/`, `_docs/`).
+- Includes a **"Default behaviors for Claude"** section that makes the plugin feel ambient. Agents auto-read `_docs/` before answering questions about project structure or conventions; auto-read role profiles before routing; **suggest** thread-creation, claims, attachments when the user's intent is clear; and never silently archive, release, or mark threads done. (Tier 1: silent auto. Tier 2: suggest then wait for yes. Tier 3: never automatic — explicit user instruction required.)
+- Has a "Notes for the team" section for the user's project-specific additions.
+
+Edit it to add project-specific instructions (vocabulary, ways of working, "always check X before doing Y") and every collaborator's Claude picks them up after the next Syncthing sync. The template has a sentinel comment at the end (`<!-- codesync-template-v2 -->`); removing that comment opts out of future auto-refreshes during `/install-codesync` re-runs, so any custom edits are preserved.
 
 **How agents reference docs automatically — two layers, working together:**
 
@@ -275,7 +281,7 @@ Two pieces, working together, make every collaborator's Claude aware of project-
 
 Edit conflicts: Syncthing is last-write-wins. If two collaborators edit the same doc at the same time, both versions are preserved under `.stversions/` for recovery — no automatic merge.
 
-**For projects created before v0.14:** re-run `/install-codesync` and pick your existing project from the picker. The seeder is idempotent — it only adds the missing files (`_docs/` directory, `_docs/README.md`, `CLAUDE.md`) and leaves anything already in place.
+**For projects created before v0.14:** re-run `/install-codesync` and pick your existing project from the picker. The seeder is idempotent — it only adds the missing files (`_docs/`, `_docs/README.md`, `CLAUDE.md`) and leaves anything already in place. If your CLAUDE.md is the older default template (no `Default behaviors for Claude` section), the install command will offer to refresh it to the current template — declining preserves your existing file untouched.
 
 ## Two teammates in the same role
 

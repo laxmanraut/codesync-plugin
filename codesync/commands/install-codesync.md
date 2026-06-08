@@ -150,6 +150,30 @@ After `ACTIVE_PROJECT` / `PROJECT_PATH` are set (regardless of which sub-case), 
 
 The script prints `CREATED=<comma-separated>` of any files it added (`_docs/`, `_docs/README.md`, `CLAUDE.md`). If `CREATED` is non-empty, tell the user briefly: *"Scaffolded project docs: \<list>. The new `CLAUDE.md` is loaded automatically by Claude Code whenever you work in or near this directory — edit it to add project-specific instructions."* If `CREATED` is empty, stay quiet.
 
+### Step 3b — Offer to refresh an out-of-date default CLAUDE.md
+
+If the seeder reported `CREATED=` (empty — i.e. CLAUDE.md already existed and wasn't created fresh), check whether the existing CLAUDE.md is an unmodified prior default that should be refreshed to the latest template.
+
+Read `<PROJECT_PATH>/CLAUDE.md`. Determine its state:
+
+- **Current template** — contains the exact comment `<!-- codesync-template-v2 -->` (current version). No refresh needed; do nothing. Stay quiet.
+- **Older default (or no marker yet)** — contains the section headings `## Folder layout`, `## Conventions`, and `## Notes for the team` exactly (signs of the v0.14 template), AND does NOT contain the v2 marker. This is the v0.14 default unmodified; safe to refresh.
+- **User-customized** — none of the above (user has edited substantially). Do NOT refresh; mention to the user that their CLAUDE.md has custom edits and the new template includes a "Default behaviors for Claude" section they may want to merge manually.
+
+For the "older default" case, ask the user:
+
+> Your project's `CLAUDE.md` looks like the v0.14 default (unmodified). v0.18 ships a richer template that includes a **Default behaviors for Claude** section — it makes the plugin feel ambient (agents auto-read `_docs/`, auto-suggest threads when you describe cross-role work, etc.). Want to refresh it now? (yes/no, default yes)
+
+On yes, run:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh" --project "<ACTIVE_PROJECT>" --path "<PROJECT_PATH>" --refresh-claude-md
+```
+
+Tell the user the file has been refreshed and that the new behaviors will activate automatically in the next Claude session that loads this project's CLAUDE.md.
+
+On no, leave alone.
+
 ## Step 4 — Read existing role profiles in the active project
 
 List the `.md` files in `<PROJECT_PATH>/_roles/`, **ignoring `README.md`**. For each remaining file, read its full content — these are the roles already registered on this machine or synced from paired peers.
