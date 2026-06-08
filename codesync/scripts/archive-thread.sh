@@ -73,8 +73,23 @@ DEST_PATH="$DEST_DIR/$SLUG.md"
 mkdir -p "$DEST_DIR"
 mv "$TARGET" "$DEST_PATH"
 
+# Move the thread's .attachments/ directory along with it, if it exists
+SRC_ATTACH_DIR="${TARGET%.md}.attachments"
+DEST_ATTACH_DIR="${DEST_PATH%.md}.attachments"
+MOVED_ATTACHMENTS=""
+if [ -d "$SRC_ATTACH_DIR" ]; then
+  if [ -e "$DEST_ATTACH_DIR" ]; then
+    log "WARNING: $DEST_ATTACH_DIR already exists; leaving attachments at source ($SRC_ATTACH_DIR)."
+  else
+    mv "$SRC_ATTACH_DIR" "$DEST_ATTACH_DIR"
+    MOVED_ATTACHMENTS="$DEST_ATTACH_DIR"
+    log "Moved attachments: $SRC_ATTACH_DIR → $DEST_ATTACH_DIR"
+  fi
+fi
+
 log "Archived $TARGET → $DEST_PATH"
 printf '\n'
 printf 'ARCHIVED=%s\n' "$DEST_PATH"
 printf 'FROM=%s\n' "$TARGET"
 printf 'ROLE=%s\n' "$ROLE"
+printf 'MOVED_ATTACHMENTS=%s\n' "$MOVED_ATTACHMENTS"

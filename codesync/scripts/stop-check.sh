@@ -127,6 +127,8 @@ try:
         frm    = fm.get("from", "")
         frm_id = fm.get("from-identity", "")
         owner  = fm.get("owner", "")
+        attach_raw = fm.get("attachments", "")
+        attach_count = len([a for a in attach_raw.split(",") if a.strip()]) if attach_raw else 0
         parts2 = []
         if is_archive: parts2.append("[archived]")
         if addressed_to and len(filter_roles) > 1:
@@ -134,6 +136,7 @@ try:
         if status:     parts2.append(f"[{status}]")
         if owner:      parts2.append(f"[owned by {owner}]")
         if title:      parts2.append(title)
+        if attach_count: parts2.append(f"[+ {attach_count} attachment{'s' if attach_count != 1 else ''}]")
         if frm and frm_id: parts2.append(f"(from {frm}/{frm_id})")
         elif frm:          parts2.append(f"(from {frm})")
         prefix = " ".join(parts2) if parts2 else ""

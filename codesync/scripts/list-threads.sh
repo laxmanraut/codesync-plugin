@@ -110,6 +110,8 @@ for d, is_arch in scan_dirs:
             mtime = os.path.getmtime(path)
         except OSError:
             mtime = 0
+        attachments_raw = fm.get("attachments", "")
+        attachments_list = [a.strip() for a in attachments_raw.split(",") if a.strip()] if attachments_raw else []
         entries.append({
             "path":   path,
             "rel":    os.path.relpath(path, proj_path),
@@ -122,6 +124,7 @@ for d, is_arch in scan_dirs:
             "age":    short_age(mtime),
             "is_archive": is_arch,
             "has_fm": bool(fm),
+            "attachment_count": len(attachments_list),
         })
 
 print()
@@ -162,9 +165,10 @@ for e in entries:
     else:
         if e["owner"]:
             owner_label = f"[owned by {e['owner']}] "
+    attach_label = f" [+ {e['attachment_count']} attachment{'s' if e['attachment_count'] != 1 else ''}]" if e['attachment_count'] else ""
     if len(title) > 50:
         title = title[:47] + "..."
-    title = (arch_prefix + owner_label + title).ljust(60)
+    title = (arch_prefix + owner_label + title + attach_label).ljust(60)
     # Build "from" string — show role/identity if both present
     if e['fromRole'] and e['fromIdentity']:
         fr = f"from {e['fromRole']}/{e['fromIdentity']}"

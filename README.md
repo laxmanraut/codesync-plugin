@@ -271,6 +271,35 @@ The claim script refuses to overwrite an existing claim by someone else — best
 
 If you'd rather have completely separate inboxes (e.g., two backends own different parts of the system), use distinct role names instead — `backend-api` and `backend-data`, for example. The current plugin handles that pattern with zero special-casing.
 
+## Sharing non-markdown files (mockups, PDFs, screenshots)
+
+Threads are markdown, but you'll often want to send images, PDFs, HTML mockups, or other files alongside them — a design role sending login mockups to frontend, a PM sharing a spec PDF, a designer dropping screen recordings. Two-step pattern:
+
+1. Write a thread describing what you're sending: `/codesync-thread-new` → *"For frontend: login mockup v1 attached, focus on the form-validation states."*
+2. Attach the files: `/codesync-thread-attach <slug> <file-path> [<file-path>...]`
+
+Example:
+
+```
+/codesync-thread-attach login-mockup-v1 ~/Desktop/login.png ~/Desktop/profile.png ~/Desktop/cart.png
+```
+
+Files are copied into `_inbox/<role>/<slug>.attachments/<filename>` (a per-thread subdirectory next to the thread file), syncing to every paired peer within seconds. The thread's frontmatter records the attachment list:
+
+```yaml
+codesync:
+  ...
+  attachments: login.png, profile.png, cart.png
+```
+
+The thread listing, the post-turn auto-check, and the session-start summary all show `[+ 3 attachments]` next to the title so the recipient knows there's more than just text. The attachments themselves are first-class files on disk that any tool can read.
+
+Claude is multimodal — once a file lands on the recipient's machine, they can ask their Claude *"open `login.png` and tell me what's on it"* and Claude reads the image / PDF directly. No special viewer needed.
+
+Re-attaching a file with the same name overwrites it (the previous version is preserved in `.stversions/` by Syncthing) — useful for shipping "v2 of this mockup" without changing the thread. Attachments move along with the thread when you `/codesync-thread-archive` or `/codesync-thread-unarchive`.
+
+Constraint: attachment filenames cannot contain commas (the frontmatter field is comma-separated). Spaces and special characters are fine.
+
 ## Threads — structured notes, tasks, and replies
 
 A *thread* is a markdown file with a small YAML header that declares who wrote it, who it's for, what status it has, and (optionally) what earlier thread it replies to. Threads live in role-addressed inboxes inside a project: `_inbox/<recipient-role>/<slug>.md`.
@@ -407,6 +436,7 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 | `/codesync-thread-unarchive <slug>` | Reverse of archive — bring an archived thread back into the active inbox. |
 | `/codesync-thread-claim <slug>` | Claim a thread (sets `owner: <your-identity>` and flips `todo→wip`). For teams where two+ people share a role. |
 | `/codesync-thread-release <slug>` | Reverse of claim — clears the `owner` field, returning the thread to the unclaimed pool. |
+| `/codesync-thread-attach <slug> <file>...` | Attach one or more files (images, PDFs, HTML mockups, anything) to an existing thread. Files sync alongside the thread; listings show `[+ N attachments]`. |
 | `/codesync-doc-list` | List project-wide docs in `_docs/` — filename + first heading + size. Read-only; ask Claude to read any specific doc afterwards. |
 | `/codesync-statusline-setup` | Install codesync's status-line segment (shows `codesync ▴ N new` in Claude Code's bottom bar when there are unread items). Backs up settings.json. |
 | `/codesync-statusline-teardown` | Remove codesync's status-line segment; restore prior statusLine. |
