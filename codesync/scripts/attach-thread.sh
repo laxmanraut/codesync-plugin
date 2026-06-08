@@ -81,6 +81,19 @@ for f in "${FILES[@]}"; do
   esac
 done
 
+# Pre-flight: confirm the target file has a codesync frontmatter block we can
+# update. Failing here means NO files have been copied yet, so the user's
+# filesystem state stays clean (no orphan files in .attachments/).
+HAS_FM=$(python3 - "$TARGET" <<'PY'
+import re, sys
+content = open(sys.argv[1]).read()
+print("yes" if re.match(r'\A---\s*\n.*?\n---\s*\n', content, re.DOTALL) else "no")
+PY
+)
+if [ "$HAS_FM" != "yes" ]; then
+  err "Thread file '$TARGET' has no codesync frontmatter block — can't record the attachments list. Either add a '---\\ncodesync:\\n  ...\\n---' block at the top of the file, or use /codesync-thread-new to create the thread with the right shape."
+fi
+
 mkdir -p "$ATTACH_DIR"
 
 ADDED=()

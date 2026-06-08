@@ -338,8 +338,11 @@ Roles aren't restricted to one status convention — same `to`-role can receive 
 | `/codesync-thread-list` | Lists threads in the active role's inbox, with status + title + sender + age. `--all` shows every role's inbox. `--status <s>` filters by status. `--archive` lists archived threads, `--include-archive` shows both. Offers a project picker (existing only) if no project is active. |
 | `/codesync-thread-reply <slug>` | Creates a reply file addressed back to the original thread's sender, with `replies-to` set automatically. |
 | `/codesync-thread-set-status <slug> <status>` | Moves a thread between `todo` / `wip` / `done` / `blocked` / `note` without opening the file. Atomic rewrite of the status field only. |
-| `/codesync-thread-archive <slug>` | Moves a resolved or stale thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved. |
-| `/codesync-thread-unarchive <slug>` | Reverse of archive — moves an archived thread back into the active inbox. |
+| `/codesync-thread-archive <slug>` | Moves a resolved or stale thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved. Attachments move along with the thread. |
+| `/codesync-thread-unarchive <slug>` | Reverse of archive — moves an archived thread back into the active inbox. Attachments move back too. |
+| `/codesync-thread-claim <slug>` | Claim a thread (sets `owner: <your-identity>`, promotes `todo→wip`). For teams where two+ people share a role. |
+| `/codesync-thread-release <slug>` | Reverse of claim — clears the `owner` field. |
+| `/codesync-thread-attach <slug> <file>...` | Attach one or more files (images, PDFs, anything) to an existing thread. Files sync alongside; listings show `[+ N attachments]`. |
 
 ### Auto-check enrichment
 
