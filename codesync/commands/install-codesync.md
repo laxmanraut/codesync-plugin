@@ -152,19 +152,25 @@ The script prints `CREATED=<comma-separated>` of any files it added (`_docs/`, `
 
 ### Step 3b — Offer to refresh an out-of-date default CLAUDE.md
 
-If the seeder reported `CREATED=` (empty — i.e. CLAUDE.md already existed and wasn't created fresh), check whether the existing CLAUDE.md is an unmodified prior default that should be refreshed to the latest template.
+If the seeder reported `CREATED=` (empty — i.e. CLAUDE.md already existed and wasn't created fresh), check whether to offer a refresh to the latest template.
 
-Read `<PROJECT_PATH>/CLAUDE.md`. Determine its state:
+Read `<PROJECT_PATH>/CLAUDE.md`. Two cases:
 
-- **Current template** — contains the exact comment `<!-- codesync-template-v2 -->` (current version). No refresh needed; do nothing. Stay quiet.
-- **Older default (or no marker yet)** — contains the section headings `## Folder layout`, `## Conventions`, and `## Notes for the team` exactly (signs of the v0.14 template), AND does NOT contain the v2 marker. This is the v0.14 default unmodified; safe to refresh.
-- **User-customized** — none of the above (user has edited substantially). Do NOT refresh; mention to the user that their CLAUDE.md has custom edits and the new template includes a "Default behaviors for Claude" section they may want to merge manually.
+**Case A — Current template (v2 marker present).** If the file contains the exact comment `<!-- codesync-template-v2 -->`, it's already on the current template. Do nothing. Stay quiet.
 
-For the "older default" case, ask the user:
+**Case B — No v2 marker.** The file is either an older default OR a user-customized version. **We cannot reliably tell which from text alone** — a user who replaces the placeholder "Notes for the team" content with real team notes looks structurally identical to an unmodified default. So we must default to safe and let the user decide.
 
-> Your project's `CLAUDE.md` looks like the v0.14 default (unmodified). v0.18 ships a richer template that includes a **Default behaviors for Claude** section — it makes the plugin feel ambient (agents auto-read `_docs/`, auto-suggest threads when you describe cross-role work, etc.). Want to refresh it now? (yes/no, default yes)
+Ask the user, with a clear OVERWRITE warning, defaulting to **no**:
 
-On yes, run:
+> Your project's `CLAUDE.md` doesn't have the v0.18 template marker. v0.18 ships a richer template with a **"Default behaviors for Claude"** section that makes the plugin feel ambient (agents auto-read `_docs/`, auto-suggest threads when you describe cross-role work, auto-suggest claims when you start work on an inbox item).
+>
+> **Refreshing will OVERWRITE the entire file with the new template — any custom edits will be lost.** If you've added project-specific notes in the "Notes for the team" section, those will be gone. (You can recover from Syncthing's `.stversions/` if needed.)
+>
+> Refresh now? (yes / **no** — default no)
+
+Default to **no** on a bare enter. Only run the refresh if the user explicitly types **yes**.
+
+On **yes**, run:
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh" --project "<ACTIVE_PROJECT>" --path "<PROJECT_PATH>" --refresh-claude-md
@@ -172,7 +178,7 @@ On yes, run:
 
 Tell the user the file has been refreshed and that the new behaviors will activate automatically in the next Claude session that loads this project's CLAUDE.md.
 
-On no, leave alone.
+On **no** (or default), leave alone. Mention to the user that they can manually copy the "Default behaviors for Claude" section from a newly-created project's CLAUDE.md if they want the proactive instructions without losing their customizations.
 
 ## Step 4 — Read existing role profiles in the active project
 
