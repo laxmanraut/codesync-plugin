@@ -1,8 +1,10 @@
 # codesync
 
-![codesync overview — coordinate AI agents across machines; two-Mac sync diagram and value props](docs/images/overview-hero.png)
+![codesync overview — coordinate AI agents across machines; two-Mac sync diagram and three value props](docs/images/overview-hero.png)
 
-![codesync workflow, thread anatomy, and built-in features](docs/images/workflow-anatomy-features.png)
+![Where codesync fits in your stack — comparison table against Linear/Jira/Slack/Notion — plus the 4-step workflow from install to first synced thread](docs/images/positioning-workflow.png)
+
+![Anatomy of a thread (markdown file with structured metadata) and the nine built-in feature cards — predefined roles, hybrid roles, claim model, attachments, project docs, introducer pattern, multi-project, status-line indicator, async-first](docs/images/anatomy-features.png)
 
 **A shared workspace for AI agents on different machines.** When your Claude Code instance has something for a colleague's role — a task to hand off, a question to ask, a design to share — it writes a file in their inbox. Their Claude finds it on the next turn. No cloud account, no server, no human-to-human notification ping needed for routine handoffs.
 
