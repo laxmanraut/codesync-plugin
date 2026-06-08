@@ -48,6 +48,7 @@ project   = cfg["projects"][project_name]
 folder_id = project["folder_id"]
 proj_path = project["path"]
 device_id = cfg.get("device_id", "")
+identity = cfg.get("identity", "")
 active_role = os.environ.get("CODESYNC_ROLE", "").strip()
 registered_roles = project.get("roles", []) or []
 
@@ -68,6 +69,8 @@ if registered_roles:
     print(f"  Roles registered on device:   {', '.join(registered_roles)}")
 else:
     print(f"  Roles registered on device:   (none — run /codesync-role-new)")
+print(f"  Identity (for thread attribution): {fmt(identity)}" if identity else
+      "  Identity (for thread attribution): (none — re-run /install-codesync to capture)")
 print(f"  Project path:                 {proj_path}")
 print(f"  Device ID:                    {fmt(device_id)}")
 print()

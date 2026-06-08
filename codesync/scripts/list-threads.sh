@@ -115,6 +115,8 @@ for d, is_arch in scan_dirs:
             "rel":    os.path.relpath(path, proj_path),
             "status": fm.get("status", ""),
             "fromRole": fm.get("from", ""),
+            "fromIdentity": fm.get("from-identity", ""),
+            "owner":  fm.get("owner", ""),
             "toRole":   fm.get("to", os.path.basename(d)),
             "title":  fm.get("title", "") or fn[:-3],
             "age":    short_age(mtime),
@@ -148,12 +150,30 @@ for e in entries:
     tag = f"[{status}]".ljust(10)
     title = e["title"]
     arch_prefix = "[archived] " if e["is_archive"] else ""
+    # owner label: [owned by X] if claimed, [unclaimed] otherwise (only shown
+    # when listing all roles, so the user isn't drowning in [unclaimed] labels
+    # when they're already looking at one role's inbox)
+    owner_label = ""
+    if all_inboxes:
+        if e["owner"]:
+            owner_label = f"[owned by {e['owner']}] "
+        elif e["status"] in ("todo", "wip"):
+            owner_label = "[unclaimed] "
+    else:
+        if e["owner"]:
+            owner_label = f"[owned by {e['owner']}] "
     if len(title) > 50:
         title = title[:47] + "..."
-    title = (arch_prefix + title).ljust(60)
-    fr = f"from {e['fromRole']}" if e['fromRole'] else "(no from)"
+    title = (arch_prefix + owner_label + title).ljust(60)
+    # Build "from" string — show role/identity if both present
+    if e['fromRole'] and e['fromIdentity']:
+        fr = f"from {e['fromRole']}/{e['fromIdentity']}"
+    elif e['fromRole']:
+        fr = f"from {e['fromRole']}"
+    else:
+        fr = "(no from)"
     age = e['age']
-    print(f"  {tag} {title} {fr.ljust(18)} {age}")
+    print(f"  {tag} {title} {fr.ljust(22)} {age}")
     print(f"             {e['rel']}")
 
 print()

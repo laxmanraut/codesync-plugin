@@ -95,6 +95,8 @@ try:
                 "status": fm.get("status", ""),
                 "title":  fm.get("title", "") or fn[:-3],
                 "from":   fm.get("from", ""),
+                "from_id": fm.get("from-identity", ""),
+                "owner":   fm.get("owner", ""),
                 "mtime":  mtime,
                 "age":    short_age(mtime),
             })
@@ -185,8 +187,14 @@ try:
             title = e["title"]
             if len(title) > 50:
                 title = title[:47] + "..."
-            from_str = f"from {e['from']}" if e["from"] else "no from"
-            print(f"    {tag} {title} ({from_str}, {e['age']})")
+            owner_tag = f" [owned by {e['owner']}]" if e["owner"] else ""
+            if e["from"] and e["from_id"]:
+                from_str = f"from {e['from']}/{e['from_id']}"
+            elif e["from"]:
+                from_str = f"from {e['from']}"
+            else:
+                from_str = "no from"
+            print(f"    {tag} {title}{owner_tag} ({from_str}, {e['age']})")
         if len(entries) > per_role_top:
             print(f"    …and {len(entries) - per_role_top} more")
 

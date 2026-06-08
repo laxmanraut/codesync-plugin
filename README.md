@@ -251,6 +251,26 @@ Edit conflicts: Syncthing is last-write-wins. If two collaborators edit the same
 
 **For projects created before v0.14:** re-run `/install-codesync` and pick your existing project from the picker. The seeder is idempotent — it only adds the missing files (`_docs/` directory, `_docs/README.md`, `CLAUDE.md`) and leaves anything already in place.
 
+## Two teammates in the same role
+
+Sometimes you have two (or more) people on the team playing the same role — two backend engineers, two designers, etc. In that case, threads addressed `to: backend` land in a single shared inbox that both backends see. Without coordination, both might pick up the same task, or neither does because each thinks the other will.
+
+codesync handles this with **identity** and **claim**:
+
+**Identity** — captured during `/install-codesync` (auto-suggested from your `git config user.name`, or you type it). Stored on your machine, attached to every thread you write as `from-identity`. So a thread shows `(from backend/alice)` rather than just `(from backend)` — readers can tell which backend sent it.
+
+**Claim** — when a backend wants to take a thread from the shared inbox:
+
+```
+/codesync-thread-claim <slug>
+```
+
+This sets `owner: alice` in the thread's frontmatter and (by default) flips `status: todo → wip`. The other backend's session-start summary, post-turn check, and `/codesync-thread-list` all label the thread `[owned by alice]` so they know to skip it. Use `/codesync-thread-release <slug>` to return a thread to the unclaimed pool.
+
+The claim script refuses to overwrite an existing claim by someone else — best-effort race protection. If two people claim at the exact same instant, Syncthing's last-write-wins decides, and both copies are preserved in `.stversions/` for recovery.
+
+If you'd rather have completely separate inboxes (e.g., two backends own different parts of the system), use distinct role names instead — `backend-api` and `backend-data`, for example. The current plugin handles that pattern with zero special-casing.
+
 ## Threads — structured notes, tasks, and replies
 
 A *thread* is a markdown file with a small YAML header that declares who wrote it, who it's for, what status it has, and (optionally) what earlier thread it replies to. Threads live in role-addressed inboxes inside a project: `_inbox/<recipient-role>/<slug>.md`.
@@ -261,8 +281,10 @@ A *thread* is a markdown file with a small YAML header that declares who wrote i
 ---
 codesync:
   from: backend
+  from-identity: alice    # auto-included; the human who wrote this
   to: frontend
   status: todo            # todo | wip | done | blocked | note
+  owner: bob              # optional; set by /codesync-thread-claim
   title: "Auth v2 endpoint ready to wire up"
   created: 2026-06-06T01:23:00Z
   replies-to: _inbox/backend/auth-v2-question.md   # optional, for replies
@@ -383,6 +405,8 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 | `/codesync-thread-set-status <slug> <status>` | Move a thread between `todo` / `wip` / `done` / `blocked` / `note` without hand-editing. |
 | `/codesync-thread-archive <slug>` | Move a thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved, just out of default views. |
 | `/codesync-thread-unarchive <slug>` | Reverse of archive — bring an archived thread back into the active inbox. |
+| `/codesync-thread-claim <slug>` | Claim a thread (sets `owner: <your-identity>` and flips `todo→wip`). For teams where two+ people share a role. |
+| `/codesync-thread-release <slug>` | Reverse of claim — clears the `owner` field, returning the thread to the unclaimed pool. |
 | `/codesync-doc-list` | List project-wide docs in `_docs/` — filename + first heading + size. Read-only; ask Claude to read any specific doc afterwards. |
 | `/codesync-statusline-setup` | Install codesync's status-line segment (shows `codesync ▴ N new` in Claude Code's bottom bar when there are unread items). Backs up settings.json. |
 | `/codesync-statusline-teardown` | Remove codesync's status-line segment; restore prior statusLine. |

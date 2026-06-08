@@ -1,7 +1,7 @@
 ---
 description: One-time setup — install Syncthing on this machine and register a first project + role(s)
 argument-hint: "(no arguments — interactive)"
-allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/install-syncthing.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/migrate-v0.5.0.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/create-project.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-role-in-config.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh:*)", "Bash(python3:*)"]
+allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/install-syncthing.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/migrate-v0.5.0.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/create-project.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-role-in-config.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-identity.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh:*)", "Bash(python3:*)"]
 ---
 
 # Install CodeSync
@@ -31,6 +31,48 @@ DEVICE_ID=<this machine's syncthing device id>
 ```
 
 Capture the DEVICE_ID value. If the script exited non-zero, surface its error message to the user and STOP.
+
+## Step 1b — Capture identity (this machine's "who am I")
+
+Identity is a short human-readable name (e.g. `alice`, `bob`, `laxman`) that attaches to every thread you write — `from-identity: <name>` in the frontmatter. It matters when two or more people on the team share the same role (e.g., two backend developers): the identity tells the team WHO authored each thread, and it powers `/codesync-thread-claim` so one backend can grab a thread and the other knows to skip it.
+
+Identity is machine-level (stored in `~/.config/codesync/config.json`), not synced to peers — your collaborators see it as the `from-identity` on your threads, but they don't share storage of it.
+
+### Skip if already set
+
+Read `~/.config/codesync/config.json`. If it has a non-empty top-level `identity` field, capture it as `IDENTITY` and skip to Step 2 — don't re-prompt.
+
+### Suggest from git config
+
+Run:
+
+```!
+"${CLAUDE_PLUGIN_ROOT}/scripts/register-identity.sh" --suggest
+```
+
+Output is `GIT_FOUND=yes|no`, `GIT_NAME=<full name from git>`, `SUGGESTED=<normalized>`.
+
+### Confirm with the user
+
+**Case A — `GIT_FOUND=yes`:** Ask the user:
+> Your git config says `<GIT_NAME>` — I'll use `<SUGGESTED>` as your identity for thread attribution. Want to change it? (press enter to accept, or type a new one — lowercase letters/digits with hyphens, e.g. `alice`, `bob-frontend`)
+
+If they press enter, use `SUGGESTED`. Otherwise validate the input matches `^[a-z0-9][a-z0-9-]*$`.
+
+**Case B — `GIT_FOUND=no`:** Ask:
+> What name should I attach to your threads? Lowercase letters/digits with hyphens — e.g. `alice`, `bob`, `laxman`. This is just for "who sent this" labels when two teammates share a role.
+
+Validate the input. Re-ask if invalid.
+
+### Save it
+
+Once the user has confirmed a value, substitute `<IDENTITY>` and run:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/register-identity.sh" --set "<IDENTITY>"
+```
+
+The script prints `SAVED_IDENTITY=<value>` on success.
 
 ## Step 2 — Detect whether migration is needed
 
@@ -272,6 +314,7 @@ Print this template (substituting real values):
 ✓ CodeSync installed on this machine.
 
   Device ID:       <DEVICE_ID>
+  Identity:        <IDENTITY>   (attached to every thread you write as `from-identity`)
   Active project:  <ACTIVE_PROJECT>
   Project path:    <PROJECT_PATH>
   Roles registered on this machine in this project:

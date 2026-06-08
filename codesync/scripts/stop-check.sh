@@ -125,13 +125,17 @@ try:
         status = fm.get("status", "")
         title  = fm.get("title", "")
         frm    = fm.get("from", "")
+        frm_id = fm.get("from-identity", "")
+        owner  = fm.get("owner", "")
         parts2 = []
         if is_archive: parts2.append("[archived]")
         if addressed_to and len(filter_roles) > 1:
             parts2.append(f"[→{addressed_to}]")
         if status:     parts2.append(f"[{status}]")
+        if owner:      parts2.append(f"[owned by {owner}]")
         if title:      parts2.append(title)
-        if frm:        parts2.append(f"(from {frm})")
+        if frm and frm_id: parts2.append(f"(from {frm}/{frm_id})")
+        elif frm:          parts2.append(f"(from {frm})")
         prefix = " ".join(parts2) if parts2 else ""
         return f"{prefix}  {p}" if prefix else p
 

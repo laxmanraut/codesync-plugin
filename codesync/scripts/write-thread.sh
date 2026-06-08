@@ -91,14 +91,27 @@ TARGET_FILE="$TARGET_DIR/$SLUG.md"
 # Build content
 CREATED=$(python3 -c 'import datetime; print(datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))')
 
-FRONTMATTER=$(python3 - "$FROM" "$TO" "$STATUS" "$TITLE" "$CREATED" "$REPLIES_TO" <<'PY'
-import sys, json
-frm, to, status, title, created, replies_to = sys.argv[1:7]
+# Look up this machine's identity (top-level field in config). Empty string if
+# unset — older configs from before v0.15 won't have it; we omit the
+# from-identity field rather than erroring, so existing flows still work.
+IDENTITY=$(python3 -c '
+import json, sys
+try:
+    cfg = json.load(open(sys.argv[1]))
+    print(cfg.get("identity", ""))
+except Exception:
+    print("")
+' "$CFG_FILE")
+
+FRONTMATTER=$(python3 - "$FROM" "$TO" "$STATUS" "$TITLE" "$CREATED" "$REPLIES_TO" "$IDENTITY" <<'PY'
+import sys
+frm, to, status, title, created, replies_to, identity = sys.argv[1:8]
 lines = ["---", "codesync:"]
 lines.append(f"  from: {frm}")
+if identity:
+    lines.append(f"  from-identity: {identity}")
 lines.append(f"  to: {to}")
 lines.append(f"  status: {status}")
-# Title may need quoting if it contains special chars
 title_esc = title.replace('"', '\\"')
 lines.append(f'  title: "{title_esc}"')
 lines.append(f"  created: {created}")
