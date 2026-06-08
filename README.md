@@ -49,6 +49,38 @@ In Claude Code:
 
 The `marketplace update` and `reload-plugins` steps refresh Claude Code's local plugin cache. Without them, the install can complain that the plugin isn't there.
 
+## 5-minute quickstart
+
+A walkthrough from zero to your first synced thread. Each step links to the detailed section below.
+
+**Day 0 — set up your machine.** Run `/install-codesync`. It installs Syncthing once, captures your identity for thread attribution (auto-suggested from your `git config user.name`), asks you to name a project, and shows a numbered role picker (Backend, Frontend, PM, Designer, etc., plus "Custom"). Multi-select is fine — pick `5,7` to register as PM + Designer. Prints your **Device ID**. → See *[First-time setup](#first-time-setup)*.
+
+**Day 0+ — share the Device ID with your collaborator.** They install the plugin and run `/install-codesync` with **the same project name**. Each side runs `/codesync-pair --peer <other-device-id>` once. Syncthing connects directly; the project folder mirrors between the two Macs within seconds. → See *[Pairing with a collaborator](#pairing-with-a-collaborator)*.
+
+**Day 1 — send a thread.** In a terminal with the project + role activated:
+
+```
+/codesync-thread-new
+```
+
+You'll be asked who the thread is for and what to say. Reply in plain English (*"For frontend: auth v2 endpoint ready at /api/auth/v2…"*). Claude writes it to `_inbox/frontend/<slug>.md` with structured metadata. → See *[Threads](#threads--structured-notes-tasks-and-replies)*.
+
+**Day 1 — receive a thread.** Your collaborator launches Claude. At session start, they see what's waiting in every inbox they're registered for. After every Claude turn, anything new since the last turn surfaces automatically. → See *[How content surfaces to you](#how-content-surfaces-to-you)*.
+
+**Daily workflow:**
+
+- `/codesync-thread-reply <slug>` — auto-addresses back to the original sender.
+- `/codesync-thread-set-status <slug> <todo|wip|done|blocked|note>` — move a thread through its lifecycle.
+- `/codesync-thread-archive <slug>` — move a resolved thread out of the active inbox.
+- `/codesync-thread-attach <slug> <file>...` — attach mockups, PDFs, screenshots to an existing thread. → See *[Sharing non-markdown files](#sharing-non-markdown-files-mockups-pdfs-screenshots)*.
+- `/codesync-status` — health check (sync state, peers connected, your identity).
+
+**When your team grows past 2 people:** designate one trusted peer as **introducer**. Others pair with them using `/codesync-pair --peer <id> --as-introducer` — Syncthing then auto-shares the rest of the team. → See *[Teams of 3+](#teams-of-3--use-an-introducer)*.
+
+**When two teammates share the same role** (two backends, two designers): use `/codesync-thread-claim <slug>` to take a thread so the other knows to skip it. Each thread carries `from-identity: alice` so attribution is clear. → See *[Two teammates in the same role](#two-teammates-in-the-same-role)*.
+
+**For project-wide reference docs** (architecture, conventions, glossary): drop markdown files in `~/codesync/<project>/_docs/`. They sync to every collaborator and surface in every Claude session via a project-level `CLAUDE.md` that's auto-loaded. → See *[Project-wide docs and CLAUDE.md auto-loading](#project-wide-docs-_docs-and-claudemd-auto-loading)*.
+
 ## First-time setup
 
 ```
@@ -68,11 +100,11 @@ This will:
 
 If you register multiple roles (e.g. PM + Designer), the post-turn inbox check and session-start summary will automatically cover ALL of them. You only need to switch `CODESYNC_ROLE` when you want to *send* messages "as" the other hat — receiving covers everything.
 
-## Activating a project + role in a terminal
+## How a terminal picks its project and role
 
-Both are **per-terminal**. Each shell decides which project and role this Claude Code session acts as, via two environment variables.
+Project and role are **per-terminal** — each shell decides independently which project it's working on and which role you're "wearing" right now. Two mechanisms, checked in this order:
 
-Minimum to activate manually:
+### 1. Environment variables (explicit, always wins)
 
 ```
 export CODESYNC_PROJECT=project-1
@@ -82,9 +114,7 @@ claude
 
 Inside Claude Code, `/codesync-status` confirms both are set.
 
-### A nicer wrapper for `~/.zshrc`
-
-Add this to your `~/.zshrc` (or `~/.bashrc`):
+**A `cs` wrapper for `~/.zshrc`** that makes switching painless:
 
 ```bash
 cs() {
@@ -110,7 +140,7 @@ cs() {
 }
 ```
 
-After reloading your shell (`source ~/.zshrc`), switching becomes:
+After reloading your shell (`source ~/.zshrc`):
 
 ```
 $ cs project-1 backend
@@ -119,30 +149,26 @@ $ claude
   Active project: project-1
   Active role:    backend
 
-# In another terminal:
+# Different terminal, different combo:
 $ cs mobile-app frontend
-$ claude
-> /codesync-status
-  Active project: mobile-app
-  Active role:    frontend
 ```
 
-## Activating a project by `cd`-ing into a directory
+### 2. Directory marker (auto-detected when env vars aren't set)
 
-You can avoid setting env vars for every terminal by *attaching* a directory to a project. Once attached, any Claude Code session launched from inside that directory (or any subdirectory) auto-resolves the project — no `export` needed.
+You can avoid setting env vars in every terminal by *attaching* a directory to a project. Any Claude session launched from inside that directory (or any subdirectory) auto-resolves the project.
 
 ```
 cd ~/code/lead-inbox-app
 /codesync-project-attach project-1 backend
 ```
 
-That drops a small `.codesync/project.json` marker file in the directory. The marker can be committed to git so your collaborator gets the same default when they clone, or `.gitignore`'d if you prefer it private to your machine.
+That drops a small `.codesync/project.json` marker in the directory — the resolver walks UP from cwd to find it. The marker can be committed to git so your collaborator gets the same default, or `.gitignore`'d if you prefer it private.
 
-**Precedence:** if the shell has `CODESYNC_PROJECT` exported, that always wins. The marker is the default fallback. So you can have a marker setting one project, and override per-terminal with `export CODESYNC_PROJECT=otherproject` when needed.
+`/codesync-project-attach` also offers to **symlink the project's `CLAUDE.md`** into the directory — once it's symlinked, Claude Code's native CLAUDE.md mechanism auto-loads project context from any session launched here (and updates flow through automatically because it's a symlink to the synced file). Refuses to overwrite a real CLAUDE.md you already have.
 
-For the role, the marker can declare a `default_role` that's used when `CODESYNC_ROLE` is unset — handy if a particular code directory is mostly worked on as one role.
+**Precedence:** env var wins over marker. So you can have a marker setting one project, and override per-terminal with `export CODESYNC_PROJECT=otherproject`.
 
-**Auto-offer from `/codesync-role-new`:** if you run `/codesync-role-new` in a terminal where no project is active, it walks you through picking (or creating) a project, then offers to drop a marker in the current directory so you don't need to set the env var. The offer is guarded against general-purpose locations (`~`, `/tmp`, `/`) — in those it defaults to *no* with a warning, since a marker there would affect every terminal launched from your home.
+**Auto-offer from `/codesync-role-new`:** running `/codesync-role-new` in a terminal where no project is active walks you through picking (or creating) a project, then offers to drop a marker in the current directory automatically. The offer is guarded against general-purpose locations (`~`, `/tmp`, `/`) — in those it defaults to *no* with a warning, since a marker there would affect every terminal launched from your home.
 
 ## Adding another project
 
@@ -345,51 +371,68 @@ When the post-turn Stop hook surfaces a new/changed thread file, it reads the fr
 
 Files without frontmatter (free-form markdown you write by hand) still surface, just without the status/title prefix.
 
-## Status-line indicator (optional)
+## How content surfaces to you
 
-CodeSync can also surface unread-inbox counts in Claude Code's bottom **status line** — the same strip that shows things like "Remote Control active". When something new arrives in your inbox since the last Claude turn, you'll see:
+Three places, ordered by when they fire:
 
-```
-codesync ▴ 3 new
-```
+### At session start
 
-next to whatever else is on your status line (netmeter, etc.). When the count is zero, codesync stays silent — no real estate used. The indicator is **per-terminal**: each Claude Code session shows the count for its active project + role.
-
-### One-time install
-
-```
-/codesync-statusline-setup
-```
-
-That safely adds codesync to your `~/.claude/settings.json` statusLine. It backs up the file first, captures any existing statusLine command, and wraps both so they compose cleanly. The change is non-destructive — your existing setup (netmeter, etc.) keeps working.
-
-To remove it later: `/codesync-statusline-teardown` — restores the prior statusLine command (or removes the entry entirely if there was none).
-
-The status line refreshes every few seconds; after install the indicator appears at the bottom of your Claude Code window shortly. Sending any message forces an immediate refresh.
-
-## Session-start summary
-
-When you launch Claude Code in a terminal with `CODESYNC_PROJECT` (and `CODESYNC_ROLE`) set, the plugin's SessionStart hook surfaces what's waiting in your inbox before you type anything:
+When you launch Claude Code in a terminal with `CODESYNC_PROJECT` (and `CODESYNC_ROLE`) set, a SessionStart hook surfaces what's waiting in your inbox before you type anything:
 
 ```
 [codesync] Project: project-1  Role: backend
   Inbox: 3 todo, 1 wip, 2 notes
 
-    [todo]     Migrate to JSON Patch for partial updates (from frontend, 2d ago)
-    [wip]      Lead inbox PR 3a (from backend, 5h ago)
-    [todo]     Refactor pagination (from frontend, 3d ago)
-    [note]     Auth v2 ready to wire (from backend, 1d ago)
-    [note]     Feature-flag rollout plan (from devops, 6h ago)
+    [todo]     Migrate to JSON Patch for partial updates (from frontend/alice, 2d ago)
+    [wip]      Lead inbox PR 3a [owned by bob] (from backend/bob, 5h ago)
+    [todo]     Refactor pagination (from frontend/alice, 3d ago)
+    [note]     Login mockup v1 [+ 2 attachments] (from design/carol, 1d ago)
+    [note]     Feature-flag rollout plan (from devops/dan, 6h ago)
     …and 2 more
+
+  Project docs (3) — read any with Claude when relevant:
+    - ARCHITECTURE.md  — System component overview
+    - CONVENTIONS.md   — Code style and naming
+    - DECISIONS.md     — Accepted decision log
 
   Run /codesync-thread-list to see them, or /codesync-thread-reply <slug> to respond.
 ```
 
-When the inbox is empty, the hook stays silent. When `CODESYNC_PROJECT` is unset, it stays silent (matches Stop hook's fail-open posture). When project is set but role isn't, it nudges you to set the role.
+Hybrid roles see all their inboxes grouped by role. If your cwd is outside the synced project folder, the hook also injects the project's `CLAUDE.md` content into the session (since Claude Code's native loader can't reach a CLAUDE.md outside cwd's ancestors).
+
+If the inbox is empty and there are no project docs to surface, the hook stays silent.
+
+### After every Claude turn
+
+A Stop hook walks the active project's folder and surfaces anything that arrived, changed, or got deleted since the last turn. Filtered to items addressed to your registered roles (under `_inbox/<role>/` or `_archive/<role>/`) plus role-profile changes; other changes collapse to a one-line "N changes outside your inbox" count.
+
+Attachment-file events are grouped under their parent thread automatically — if a designer ships 3 mockups via `/codesync-thread-attach`, the recipient sees ONE event with `[+ 3 attachments]` rather than 4 (the modified thread + 3 attachment file lines).
+
+When `CODESYNC_PROJECT` isn't set, the hook stays silent.
+
+### In Claude Code's status bar (optional)
+
+A small live indicator in the bottom strip showing unread-inbox counts:
+
+```
+codesync ▴ 3 new
+```
+
+Per-terminal — each Claude Code session shows the count for its active project + role(s). When the count is zero, the indicator stays silent (no real estate used).
+
+**One-time install:**
+
+```
+/codesync-statusline-setup
+```
+
+Safely adds the codesync segment to `~/.claude/settings.json` statusLine. Backs up the file first, captures any existing statusLine command, wraps both so they compose cleanly — non-destructive. To remove later: `/codesync-statusline-teardown` restores the prior command.
+
+The status line refreshes every few seconds. Sending any message forces an immediate refresh.
 
 ## Archiving resolved threads
 
-As threads accumulate, you'll want to move resolved/stale ones out of the active inbox without deleting them. Use `/codesync-thread-archive <slug>` — it moves the file from `_inbox/<role>/<slug>.md` to `_archive/<role>/<slug>.md`. The file is preserved with its frontmatter and body intact; it just stops appearing in `/codesync-thread-list`'s default view.
+As threads accumulate, you'll want to move resolved/stale ones out of the active inbox without deleting them. Use `/codesync-thread-archive <slug>` — it moves the file from `_inbox/<role>/<slug>.md` to `_archive/<role>/<slug>.md`. The file is preserved with its frontmatter and body intact (plus any attachments — those move along with the thread); it just stops appearing in `/codesync-thread-list`'s default view.
 
 ```
 ~/codesync/project-1/
@@ -402,12 +445,6 @@ To see archived items: `/codesync-thread-list --archive` (only archive) or `/cod
 Status (`todo`/`wip`/`done`/`blocked`/`note`) and archive are **orthogonal**: a `done` thread can stay in the inbox until acknowledged, then be archived; a `todo` thread can be archived if deferred. Two separate dials.
 
 The post-turn auto-check and session-start summary continue to surface changes in `_archive/`, but with a `[archived]` prefix so they're visually distinct from active inbox work.
-
-## Post-turn auto-check
-
-After every Claude turn, a Stop hook walks the active project's folder and surfaces anything new/changed/deleted since the last check. When `CODESYNC_ROLE` is set, it filters to only items addressed to that role (under `_inbox/<role>/`) plus role-profile changes — other changes get a one-line "N changes outside your inbox" count.
-
-When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 
 ## Slash command reference
 
@@ -436,19 +473,3 @@ When `CODESYNC_PROJECT` isn't set in a terminal, the hook stays silent.
 | `/codesync-status` | Active project + role, Syncthing health, peers attached to the active project, folder sync state, registered roles. |
 
 All commands except `/install-codesync` and `/codesync-project-new` require `CODESYNC_PROJECT` to be set in the terminal.
-
-## Migration from earlier versions
-
-If you installed v0.4.x (single `~/contracts/` folder, no projects), `/install-codesync` in v0.5.0 will run a one-time migration that:
-
-- Asks for a name for your existing collaboration (default: `project-1`).
-- Moves `~/contracts/` → `~/codesync/<name>/`.
-- Updates Syncthing to point at the new path (folder ID stays the same so sync survives).
-- Rewrites `~/.config/codesync/config.json` to the new schema, preserving your API key and Device ID.
-- Backs up the old config to `~/.config/codesync/config.json.v0.4.bak`.
-
-Your collaborator runs the same migration when they update. Both of you pick the same project name so it lines up.
-
-## What's coming
-
-The originally planned scope is in. From here, real-world use will surface what's worth adding next.
