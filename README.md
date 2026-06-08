@@ -1,5 +1,9 @@
 # codesync
 
+![codesync overview — coordinate AI agents across machines; two-Mac sync diagram and value props](docs/images/overview-hero.png)
+
+![codesync workflow, thread anatomy, and built-in features](docs/images/workflow-anatomy-features.png)
+
 A Claude Code plugin for coordinating work between AI-augmented collaborators across machines — no cloud service, no central server.
 
 The mental model: each **project** is a peer-to-peer synced folder. Inside each project, work is **role-addressed** — backend, frontend, mobile, devops, whatever fits — via per-role inbox folders. Notes, tasks, design discussions, decisions, and questions flow through those inboxes, and Claude agents on each machine read and write them on behalf of their human. Each terminal picks one project + role, so the same laptop can act as different roles in different terminals — even across different projects.
