@@ -81,6 +81,65 @@ try:
             if base_mtime is None or mtime > base_mtime:
                 new_count += 1
 
+    # Track previous count to detect transitions upward (= "new arrival").
+    # Stored per project in ~/.config/codesync/.statusline-count-<project>.
+    # On first run for a project: silently establish baseline, no notification.
+    # On increase: fire macOS notification + system sound.
+    # On steady or decrease: silent.
+    count_path = os.path.expanduser(
+        f"~/.config/codesync/.statusline-count-{project}"
+    )
+    prev_count = None
+    if os.path.exists(count_path):
+        try:
+            with open(count_path) as f:
+                prev_count = int(f.read().strip())
+        except Exception:
+            prev_count = None
+
+    # Write current count back so the next invocation has the "prev"
+    try:
+        os.makedirs(os.path.dirname(count_path), exist_ok=True)
+        with open(count_path, "w") as f:
+            f.write(str(new_count))
+    except Exception:
+        pass
+
+    # Emit notification on UPWARD transition (and only after a prev value
+    # exists — don't notify on first run for a project, which would be
+    # spurious if the user opens Claude with 3 already-unread).
+    if prev_count is not None and new_count > prev_count:
+        delta = new_count - prev_count
+        if registered:
+            role_label = "+".join(registered)
+        elif role:
+            role_label = role
+        else:
+            role_label = "your inbox"
+        # Build a notification body. Avoid single quotes (they'd break the
+        # outer single-quoted shell arg). Project/role names are validated
+        # to be kebab/snake-case identifiers so they don't carry quotes
+        # themselves.
+        if delta == 1:
+            body = f"1 new thread for {role_label} in {project}"
+        else:
+            body = f"{delta} new threads for {role_label} in {project}"
+        # Escape double quotes + backslashes for AppleScript string safety.
+        body_esc = body.replace('\\', '\\\\').replace('"', '\\"')
+        title_esc = "codesync"
+        try:
+            # osascript is built into macOS, no extra install needed.
+            # "Glass" is a default macOS alert tone — short, distinguishable
+            # from Slack / Mail. Run in background so the status-line stays
+            # under its <100ms budget.
+            os.system(
+                f'osascript -e \'display notification "{body_esc}" '
+                f'with title "{title_esc}" sound name "Glass"\' '
+                f'>/dev/null 2>&1 &'
+            )
+        except Exception:
+            pass
+
     if new_count <= 0:
         sys.exit(0)
 

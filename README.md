@@ -442,9 +442,19 @@ If the inbox is empty and there are no project docs to surface, the hook stays s
 
 ### After every Claude turn
 
-A Stop hook walks the active project's folder and surfaces anything that arrived, changed, or got deleted since the last turn. Filtered to items addressed to your registered roles (under `_inbox/<role>/` or `_archive/<role>/`) plus role-profile changes; other changes collapse to a one-line "N changes outside your inbox" count.
+A Stop hook walks the active project's folder and surfaces anything that arrived, changed, or got deleted since the last turn. Each surfaced thread also gets a one-line body preview, so the receiver immediately sees *what* the message says, not just that it exists:
+
+```
+[codesync project=project-1, role=frontend] 1 change(s) for you:
+  + [todo] Roll out checkout flag to 10% (from pm/dave)  _inbox/frontend/feature-flag-rollout.md
+      > "Enable the new-checkout feature flag for 10% of users next Tuesday. Monitor error rates closely…"
+```
+
+Filtered to items addressed to your registered roles (under `_inbox/<role>/` or `_archive/<role>/`) plus role-profile changes; other changes collapse to a one-line "N changes outside your inbox" count.
 
 Attachment-file events are grouped under their parent thread automatically — if a designer ships 3 mockups via `/codesync-thread-attach`, the recipient sees ONE event with `[+ 3 attachments]` rather than 4 (the modified thread + 3 attachment file lines).
+
+When the new behaviors are loaded (via the v3 CLAUDE.md template — see *[Project-wide docs and CLAUDE.md auto-loading](#project-wide-docs-_docs-and-claudemd-auto-loading)*), Claude also **proactively reads the full contents** of any new threads on the next turn before responding, so the agent already has the context in mind by the time you ask about them.
 
 When `CODESYNC_PROJECT` isn't set, the hook stays silent.
 
@@ -467,6 +477,8 @@ Per-terminal — each Claude Code session shows the count for its active project
 Safely adds the codesync segment to `~/.claude/settings.json` statusLine. Backs up the file first, captures any existing statusLine command, wraps both so they compose cleanly — non-destructive. To remove later: `/codesync-statusline-teardown` restores the prior command.
 
 The status line refreshes every few seconds. Sending any message forces an immediate refresh.
+
+**Real-time alert when something new arrives.** Whenever the unread count climbs (e.g., 0 → 1, or 3 → 5 if a batch syncs in), the status-line script also fires a native **macOS notification** with the system "Glass" alert sound — *"2 new threads for backend in project-1"* — so you don't have to be looking at the bottom bar to know something arrived. Only fires on increase (silent on first run, silent when the count is steady or goes down). Uses macOS's built-in `osascript` — no extra install needed; grant notification permission once when prompted.
 
 ## Archiving resolved threads
 

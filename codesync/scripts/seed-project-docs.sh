@@ -99,8 +99,9 @@ When working in this project, follow these patterns automatically. They're what 
 
 ### Do automatically (no need to ask the user)
 
+- **Actively read newly-arrived threads on the next turn.** When the prior turn's post-turn auto-check (the \`[codesync project=…] N change(s) for you:\` block) surfaced one or more new (\`+\`) or modified (\`~\`) thread files in \`_inbox/<role>/\`, treat them as fresh inbox items: open and read the full content of each at the start of your next response, BEFORE addressing the user's prompt. If anything in them is relevant to the user's current question, mention it. If not, just hold the context silently — but don't ignore the arrival.
 - **Read \`_docs/\` files before answering structure/convention questions.** When the user asks something that relates to project structure, naming conventions, domain terms, architecture, or accepted design decisions: look for a relevant file in \`_docs/\` and READ it BEFORE answering from general knowledge. The session-start summary lists what's available; if a likely-relevant filename is listed, open it first.
-- **Read inbox threads for context.** When the user references a thread by slug, title, or topic — or when their current task plausibly connects to a recent inbox item — read the relevant file in \`_inbox/<role>/\` (or \`_archive/<role>/\`) before responding.
+- **Read inbox threads when the user references them.** When the user mentions a thread by slug, title, or topic — or when their current task plausibly connects to a recent inbox item — read the relevant file in \`_inbox/<role>/\` (or \`_archive/<role>/\`) before responding.
 - **Read role profiles before routing or referencing another role.** When the user names another role (frontend, backend, designer, devops, pm, etc.), check \`_roles/<role>.md\` for that role's scope so the response matches what they actually own.
 
 ### Suggest, then wait for the user's yes (don't act silently)
@@ -128,7 +129,7 @@ When working in this project, follow these patterns automatically. They're what 
 
 (Edit this file to add project-specific instructions, vocabulary, or anything an incoming collaborator's Claude should know. This file is loaded into every Claude Code session that starts in or near this directory.)
 
-<!-- codesync-template-v2 — If you've customized this file and don't want /install-codesync to auto-update it during future re-runs, delete this comment line. The detection looks for this exact marker; without it, your edits are preserved. -->
+<!-- codesync-template-v3 — If you've customized this file and don't want /install-codesync to auto-update it during future re-runs, delete this comment line. The detection looks for this exact marker; without it, your edits are preserved. -->
 README
 fi
 

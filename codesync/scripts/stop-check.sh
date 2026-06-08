@@ -176,9 +176,38 @@ try:
         prefix = " ".join(parts2) if parts2 else ""
         return f"{prefix}  {p}" if prefix else p
 
-    items  = [f"+ {label(p)}" for p in sorted(new_files)]
-    items += [f"~ {label(p)}" for p in sorted(changed)]
-    items += [f"- {p}" for p in sorted(deleted)]
+    def body_preview(rel_path, maxlen=110):
+        """Return first non-empty non-heading line of the body, capped."""
+        try:
+            full = os.path.join(proj_path, rel_path)
+            with open(full) as f:
+                content = f.read()
+            # Strip a leading YAML frontmatter block if present
+            import re as _re_bp
+            m = _re_bp.match(r'\A---\s*\n.*?\n---\s*\n', content, _re_bp.DOTALL)
+            body = content[m.end():] if m else content
+            for line in body.splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    continue
+                # Collapse any internal whitespace
+                stripped = ' '.join(stripped.split())
+                if len(stripped) > maxlen:
+                    return stripped[:maxlen - 1] + '…'
+                return stripped
+            return ''
+        except Exception:
+            return ''
+
+    # Build items as (display_line, optional_preview). Previews only for files
+    # that still exist (i.e., new or changed — not deleted).
+    items = []  # list of tuples (line, preview or None)
+    for p in sorted(new_files):
+        items.append((f"+ {label(p)}", body_preview(p)))
+    for p in sorted(changed):
+        items.append((f"~ {label(p)}", body_preview(p)))
+    for p in sorted(deleted):
+        items.append((f"- {p}", None))
 
     if not items and suppressed == 0:
         sys.exit(0)
@@ -194,8 +223,10 @@ try:
     if items:
         print()
         print(f"{header} {len(items)} change(s) for you:")
-        for line in items[:10]:
+        for line, preview in items[:10]:
             print(f"  {line}")
+            if preview:
+                print(f'      > "{preview}"')
         if len(items) > 10:
             print(f"  …and {len(items) - 10} more")
         if suppressed and filter_roles:

@@ -156,13 +156,13 @@ If the seeder reported `CREATED=` (empty — i.e. CLAUDE.md already existed and 
 
 Read `<PROJECT_PATH>/CLAUDE.md`. Two cases:
 
-**Case A — Current template (v2 marker present).** If the file contains the exact comment `<!-- codesync-template-v2 -->`, it's already on the current template. Do nothing. Stay quiet.
+**Case A — Current template (v3 marker present).** If the file contains the exact comment `<!-- codesync-template-v3 -->`, it's already on the current template. Do nothing. Stay quiet.
 
-**Case B — No v2 marker.** The file is either an older default OR a user-customized version. **We cannot reliably tell which from text alone** — a user who replaces the placeholder "Notes for the team" content with real team notes looks structurally identical to an unmodified default. So we must default to safe and let the user decide.
+**Case B — No v3 marker.** The file is either an older default (v2 or earlier) OR a user-customized version. **We cannot reliably tell which from text alone** — a user who replaces the placeholder "Notes for the team" content with real team notes looks structurally identical to an unmodified default. So we must default to safe and let the user decide.
 
 Ask the user, with a clear OVERWRITE warning, defaulting to **no**:
 
-> Your project's `CLAUDE.md` doesn't have the v0.18 template marker. v0.18 ships a richer template with a **"Default behaviors for Claude"** section that makes the plugin feel ambient (agents auto-read `_docs/`, auto-suggest threads when you describe cross-role work, auto-suggest claims when you start work on an inbox item).
+> Your project's `CLAUDE.md` doesn't have the current (v3) template marker. v0.19 ships a richer template with a new **"actively read newly-arrived threads"** instruction in the Default behaviors section — agents now proactively read any new inbox items right after the post-turn check surfaces them, instead of waiting for you to ask. Plus the prior v0.18 ambient-behavior instructions if you're refreshing from v0.14.
 >
 > **Refreshing will OVERWRITE the entire file with the new template — any custom edits will be lost.** If you've added project-specific notes in the "Notes for the team" section, those will be gone. (You can recover from Syncthing's `.stversions/` if needed.)
 >
