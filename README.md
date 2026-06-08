@@ -17,7 +17,7 @@ Backed by [Syncthing](https://syncthing.net) for the actual peer-to-peer sync. A
         ▼                                      ▼
   ┌─────────────────┐                    ┌─────────────────┐
   │ ~/codesync/     │   shared folder    │ ~/codesync/     │
-  │   lead_inbox/   │ ◄────────────────► │   lead_inbox/   │
+  │   project-1/   │ ◄────────────────► │   project-1/   │
   │     _inbox/     │      (Syncthing    │     _inbox/     │
   │       backend/  │      keeps both    │       backend/  │
   │       frontend/ │       in sync)     │       frontend/ │
@@ -59,7 +59,7 @@ This will:
 
 1. Install Syncthing via Homebrew if needed and start it as a background service.
 2. Save your Syncthing API key and Device ID.
-3. Ask you to pick or create a **project** (e.g. `lead_inbox`, `mobile-app`). Each project becomes its own Syncthing folder at `~/codesync/<project>/`. If projects already exist on this machine, a numbered picker shows them plus a "New project" option.
+3. Ask you to pick or create a **project** (e.g. `project-1`, `mobile-app`). Each project becomes its own Syncthing folder at `~/codesync/<project>/`. If projects already exist on this machine, a numbered picker shows them plus a "New project" option.
 4. Show a numbered **role picker** with 12 predefined roles across Engineering, Product & Design, and Project & People — pick one or more (comma-separated). Hybrid is fine: pick `5,7` for "Product Manager + Designer" in one go. Option 13 is "Custom (free-form)" for roles outside the curated list. Each pick comes with a starter `Owns` / `Does not own` template you can edit before saving.
 5. Print the activation command:
    ```
@@ -75,7 +75,7 @@ Both are **per-terminal**. Each shell decides which project and role this Claude
 Minimum to activate manually:
 
 ```
-export CODESYNC_PROJECT=lead_inbox
+export CODESYNC_PROJECT=project-1
 export CODESYNC_ROLE=backend
 claude
 ```
@@ -113,10 +113,10 @@ cs() {
 After reloading your shell (`source ~/.zshrc`), switching becomes:
 
 ```
-$ cs lead_inbox backend
+$ cs project-1 backend
 $ claude
 > /codesync-status
-  Active project: lead_inbox
+  Active project: project-1
   Active role:    backend
 
 # In another terminal:
@@ -133,7 +133,7 @@ You can avoid setting env vars for every terminal by *attaching* a directory to 
 
 ```
 cd ~/code/lead-inbox-app
-/codesync-project-attach lead_inbox backend
+/codesync-project-attach project-1 backend
 ```
 
 That drops a small `.codesync/project.json` marker file in the directory. The marker can be committed to git so your collaborator gets the same default when they clone, or `.gitignore`'d if you prefer it private to your machine.
@@ -156,9 +156,9 @@ Walks through naming + creates a new Syncthing folder + scaffold. After it runs,
 
 ## Pairing with a collaborator
 
-After both of you have a project of the same name (e.g. both ran `/install-codesync` with project `lead_inbox`), exchange Device IDs (printed by install or `/codesync-status`).
+After both of you have a project of the same name (e.g. both ran `/install-codesync` with project `project-1`), exchange Device IDs (printed by install or `/codesync-status`).
 
-In a terminal where `CODESYNC_PROJECT=lead_inbox` is set, run:
+In a terminal where `CODESYNC_PROJECT=project-1` is set, run:
 
 ```
 /codesync-pair --peer <their-device-id>
@@ -317,7 +317,7 @@ Roles aren't restricted to one status convention — same `to`-role can receive 
 When the post-turn Stop hook surfaces a new/changed thread file, it reads the frontmatter to show:
 
 ```
-[codesync project=lead_inbox, role=backend] 1 change(s) for you:
+[codesync project=project-1, role=backend] 1 change(s) for you:
   + [todo] Refactor lead inbox pagination (from frontend)  _inbox/backend/refactor-lead-inbox-pagination.md
 ```
 
@@ -350,7 +350,7 @@ The status line refreshes every few seconds; after install the indicator appears
 When you launch Claude Code in a terminal with `CODESYNC_PROJECT` (and `CODESYNC_ROLE`) set, the plugin's SessionStart hook surfaces what's waiting in your inbox before you type anything:
 
 ```
-[codesync] Project: lead_inbox  Role: backend
+[codesync] Project: project-1  Role: backend
   Inbox: 3 todo, 1 wip, 2 notes
 
     [todo]     Migrate to JSON Patch for partial updates (from frontend, 2d ago)
@@ -370,7 +370,7 @@ When the inbox is empty, the hook stays silent. When `CODESYNC_PROJECT` is unset
 As threads accumulate, you'll want to move resolved/stale ones out of the active inbox without deleting them. Use `/codesync-thread-archive <slug>` — it moves the file from `_inbox/<role>/<slug>.md` to `_archive/<role>/<slug>.md`. The file is preserved with its frontmatter and body intact; it just stops appearing in `/codesync-thread-list`'s default view.
 
 ```
-~/codesync/lead_inbox/
+~/codesync/project-1/
 ├── _inbox/<role>/        ← active work, surfaced everywhere
 └── _archive/<role>/      ← preserved history, hidden by default
 ```
@@ -418,7 +418,7 @@ All commands except `/install-codesync` and `/codesync-project-new` require `COD
 
 If you installed v0.4.x (single `~/contracts/` folder, no projects), `/install-codesync` in v0.5.0 will run a one-time migration that:
 
-- Asks for a name for your existing collaboration (default: `lead_inbox`).
+- Asks for a name for your existing collaboration (default: `project-1`).
 - Moves `~/contracts/` → `~/codesync/<name>/`.
 - Updates Syncthing to point at the new path (folder ID stays the same so sync survives).
 - Rewrites `~/.config/codesync/config.json` to the new schema, preserving your API key and Device ID.
