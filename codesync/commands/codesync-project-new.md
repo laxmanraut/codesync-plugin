@@ -20,7 +20,7 @@ Validate the name client-side:
 - Lowercase only
 - Must start with a letter or digit
 - Only `a-z`, `0-9`, `-`, `_` allowed
-- Don't pick a name that matches an existing project (run `/codesync-project-list` first if unsure)
+- Don't pick a name that matches an existing project (run `/codesync-status` in a terminal without `CODESYNC_PROJECT` set first — it lists every project on this machine)
 
 If the user types something invalid, re-ask with the specific reason.
 
@@ -60,7 +60,8 @@ To work in this project from this terminal, exit Claude Code and run:
 
 Then re-open Claude Code and run /codesync-role-new to register your
 first role for this project. Once a role is registered, share the
-project with a peer via /codesync-project-invite --peer <their-id>.
+project with a peer via /codesync-pair --peer <their-id> (with
+CODESYNC_PROJECT set to this new project).
 ```
 
 ## Constraints

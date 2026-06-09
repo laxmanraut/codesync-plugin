@@ -127,7 +127,7 @@ try:
     all_devices = {d["deviceID"]: d for d in get("/rest/config/devices")}
 
     if not folder_devices:
-        print("    (none — run /codesync-pair --peer <id> or /codesync-project-invite to add one)")
+        print("    (none — run /codesync-pair --peer <id> to add one)")
     else:
         for pid in sorted(folder_devices):
             d = all_devices.get(pid, {})

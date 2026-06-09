@@ -109,11 +109,11 @@ When working in this project, follow these patterns automatically. They're what 
 - **Routing work to another role.** When the user describes work intended for someone else — phrases like *"tell the frontend…"*, *"ask backend to…"*, *"the designer should…"*, *"need devops to…"* — SUGGEST \`/codesync-thread-new\` and only run it after explicit confirmation. Do NOT silently create threads on the user's behalf.
 - **Attaching files.** When the user shares an image, PDF, or other non-markdown file and the discussion implies another role would benefit from seeing it, SUGGEST \`/codesync-thread-attach\` after the thread is created.
 - **Claiming threads.** When the user begins work on a thread that's in their inbox with status \`todo\` or \`wip\`, SUGGEST \`/codesync-thread-claim <slug>\` so other teammates in the same role know it's taken.
-- **Marking done.** When the user reports completing work on a claimed thread, SUGGEST \`/codesync-thread-set-status <slug> done\` and optionally \`/codesync-thread-release <slug>\`.
+- **Marking done.** When the user reports completing work on a claimed thread, SUGGEST \`/codesync-thread-set-status <slug> done\` and optionally \`/codesync-thread-claim <slug> --release\`.
 
 ### Never automatically (requires explicit user instruction)
 
-- Never archive a thread (\`/codesync-thread-archive\`), release a claim (\`/codesync-thread-release\`), or mark a thread \`done\`/\`blocked\` without the user explicitly saying so. These are workflow judgments only the user should make.
+- Never archive a thread (\`/codesync-thread-archive\`), release a claim (\`/codesync-thread-claim <slug> --release\`), or mark a thread \`done\`/\`blocked\` without the user explicitly saying so. These are workflow judgments only the user should make.
 - Never create projects, register roles, or pair with new peers without explicit user instruction. These are machine-level operations with persistent side effects.
 - Never write threads "from" a role other than the user's currently active \`CODESYNC_ROLE\`. If they want to send "as" a different role, they need to switch \`CODESYNC_ROLE\` themselves first.
 

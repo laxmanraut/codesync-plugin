@@ -47,7 +47,7 @@ print("yes" if sys.argv[2] in cfg.get("projects", {}) else "no")
 ' "$CFG_FILE" "$PROJECT")
 
 if [ "$EXISTS" != "yes" ] && [ "$FORCE" != "yes" ]; then
-  err "Project '$PROJECT' is not registered on this machine. Run /codesync-project-list to see what's available, or /codesync-project-new to create it. Use --force to attach to a project you'll register later."
+  err "Project '$PROJECT' is not registered on this machine. Run /codesync-status (in a terminal without CODESYNC_PROJECT) to see what's available, or /codesync-project-new to create it. Use --force to attach to a project you'll register later."
 fi
 
 MARKER_DIR="$(pwd)/.codesync"

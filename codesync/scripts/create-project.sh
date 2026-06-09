@@ -51,7 +51,7 @@ projects = cfg.get("projects", {})
 print("yes" if sys.argv[2] in projects else "no")
 ' "$CFG_FILE" "$PROJECT_NAME")
 if [ "$EXISTING" = "yes" ]; then
-  err "Project '$PROJECT_NAME' already exists in $CFG_FILE. Pick a different name or use /codesync-project-list."
+  err "Project '$PROJECT_NAME' already exists in $CFG_FILE. Pick a different name, or run /codesync-status (in a terminal without CODESYNC_PROJECT) to see what's there."
 fi
 
 PROJECT_PATH="$HOME/codesync/$PROJECT_NAME"

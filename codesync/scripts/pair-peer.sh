@@ -109,7 +109,7 @@ print("yes" if sys.argv[2] in projects else "no")
     if bash "$SCRIPT_DIR/invite-peer-to-project.sh" "${INVITE_ARGS[@]}" >/dev/null 2>&1; then
       INVITED_TO="$PROJECT"
     else
-      log "WARNING: device pair succeeded but project invite failed. Run /codesync-project-invite --peer $PEER_ID manually."
+      log "WARNING: device pair succeeded but project invite failed. Re-run /codesync-pair --peer $PEER_ID manually (with CODESYNC_PROJECT set to this project)."
     fi
   else
     log "CODESYNC_PROJECT='$PROJECT' is set but no project by that name is registered — skipping project invite."

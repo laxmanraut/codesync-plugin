@@ -59,7 +59,7 @@ print(proj["folder_id"] if proj else "")
 
 [ -n "$API_KEY"   ] || err "syncthing_api_key missing in $CFG_FILE."
 [ -n "$DEVICE_ID" ] || err "device_id missing in $CFG_FILE."
-[ -n "$FOLDER_ID" ] || err "Project '$PROJECT_NAME' not found in $CFG_FILE. Run /codesync-project-list to see what's registered."
+[ -n "$FOLDER_ID" ] || err "Project '$PROJECT_NAME' not found in $CFG_FILE. Run /codesync-status (in a terminal without CODESYNC_PROJECT) to see what's registered."
 
 # 3. Refuse to invite self
 [ "$PEER_ID" = "$DEVICE_ID" ] && err "Refusing to invite own device id ($DEVICE_ID)."

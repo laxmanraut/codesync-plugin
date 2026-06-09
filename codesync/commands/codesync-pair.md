@@ -11,7 +11,7 @@ The user invoked `/codesync-pair $ARGUMENTS`. This is two operations bundled:
 1. Adds the peer to Syncthing's known devices (machine-level).
 2. If `CODESYNC_PROJECT` is set in this terminal, also invites the peer to that project's folder.
 
-If you want to invite an already-paired peer to an additional project, use `/codesync-project-invite --peer <id>` from a terminal with `CODESYNC_PROJECT` set to that project.
+If you want to invite an **already-paired** peer to an **additional** project, set `CODESYNC_PROJECT` to that other project and run `/codesync-pair --peer <id>` again — the device-pair step is a no-op (idempotent) when the peer is already known, but the project-invite still runs.
 
 ## When to use `--as-introducer`
 
@@ -83,7 +83,7 @@ No project was active in this terminal (CODESYNC_PROJECT was not set), so
 no folder is being shared yet. To share a project with this peer, set
 CODESYNC_PROJECT in your shell and run:
 
-   /codesync-project-invite --peer <PAIRED_WITH>
+   /codesync-pair --peer <PAIRED_WITH>   (run from a terminal with CODESYNC_PROJECT set to that other project)
 ```
 
 ## Constraints
