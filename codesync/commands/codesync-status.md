@@ -1,12 +1,17 @@
 ---
-description: Show the health of the CodeSync setup on this machine — Syncthing, peers, folder, and registered roles
+description: Show CodeSync health — Syncthing, peers, folder, registered roles (active project). When CODESYNC_PROJECT isn't set, lists all projects + roles on this machine instead.
 argument-hint: "(no arguments)"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/status.sh:*)"]
 ---
 
 # CodeSync status
 
-The user invoked `/codesync-status`. Run the status script and print its output verbatim:
+The user invoked `/codesync-status`. Two modes:
+
+- **Per-project mode** (when `CODESYNC_PROJECT` is set in the terminal): full health output for the active project — Syncthing reachable, peers connected, folder sync state, registered roles, etc.
+- **Summary mode** (when `CODESYNC_PROJECT` is unset): lists every project on this machine, their paths, and which roles are registered for each. Replaces what used to be a separate `/codesync-project-list` and `/codesync-role-list`.
+
+Run the status script and print its output verbatim:
 
 ```!
 "${CLAUDE_PLUGIN_ROOT}/scripts/status.sh"

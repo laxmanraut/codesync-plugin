@@ -20,7 +20,41 @@ API_KEY=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("s
 . "$SCRIPT_DIR/lib/load-env.sh"
 
 ACTIVE_PROJECT="${CODESYNC_PROJECT:-}"
-[ -n "$ACTIVE_PROJECT" ] || err "No project active in this terminal. Set CODESYNC_PROJECT or attach this directory with /codesync-project-attach. Run /codesync-project-list to see what's registered."
+
+# If no project active in this terminal, fall into "summary" mode — list all
+# registered projects, their roles, their paths. Then exit (skip the
+# Syncthing health detail which is per-project).
+if [ -z "$ACTIVE_PROJECT" ]; then
+  python3 - "$CFG_FILE" <<'PY'
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+projects = cfg.get("projects", {})
+identity = cfg.get("identity", "")
+device_id = cfg.get("device_id", "")
+print()
+print("CodeSync status (no project active in this terminal)")
+print("────────────────────────────────────────────────────")
+print(f"  Identity:    {identity or '(not set — re-run /install-codesync)'}")
+print(f"  Device ID:   {device_id or '(missing)'}")
+print()
+if not projects:
+    print("  No projects registered yet. Run /install-codesync to create one.")
+else:
+    print(f"  Projects on this machine ({len(projects)}):")
+    for name, p in sorted(projects.items()):
+        path = p.get("path", "?")
+        roles = p.get("roles", []) or []
+        roles_str = ", ".join(roles) if roles else "(no roles registered on this device)"
+        print(f"    {name}")
+        print(f"      path:  {path}")
+        print(f"      roles: {roles_str}")
+print()
+print("To activate one in this terminal:  export CODESYNC_PROJECT=<name> CODESYNC_ROLE=<role>")
+print("(or use the `cs` wrapper if you've added it to your shell)")
+print()
+PY
+  exit 0
+fi
 
 # Confirm the project exists in config
 PROJECT_EXISTS=$(python3 -c '
@@ -28,7 +62,7 @@ import json, sys
 cfg = json.load(open(sys.argv[1]))
 print("yes" if sys.argv[2] in cfg.get("projects", {}) else "no")
 ' "$CFG_FILE" "$ACTIVE_PROJECT")
-[ "$PROJECT_EXISTS" = "yes" ] || err "CODESYNC_PROJECT='$ACTIVE_PROJECT' is set but no project by that name is registered. Run /codesync-project-list."
+[ "$PROJECT_EXISTS" = "yes" ] || err "CODESYNC_PROJECT='$ACTIVE_PROJECT' is set but no project by that name is registered. Run /codesync-status (in a terminal without CODESYNC_PROJECT) to list registered projects."
 
 # Probe Syncthing
 STATUS_OK=no

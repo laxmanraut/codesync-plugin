@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# claim-thread.sh — Set the `owner` field on a thread to claim it.
+# claim-thread.sh — Manage the `owner` field on a thread.
+#
+# Default mode: claim. Sets `owner: <your-identity>`. If current status is
+# `todo`, also flips it to `wip` (claiming = starting work).
+#
+# With --release: clears `owner`. Refuses if you're not the current owner.
 #
 # Args:
 #   --slug <slug>          (required) filename without .md
-#   --no-status-change     (optional) skip the default todo→wip promotion
-#
-# Default behavior: sets `owner: <your-identity>`. If current status is `todo`,
-# also flips it to `wip` (claiming = starting work). Use --no-status-change to
-# disable the status flip.
+#   --release              (optional) release mode — clears owner instead
+#   --no-status-change     (optional, claim mode only) skip the todo→wip promotion
 #
 # Refuses to overwrite an existing `owner` set by someone else (best-effort
 # race protection — same-instant claims still possible due to Syncthing's
@@ -25,15 +27,17 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 SLUG=""
 NO_STATUS_CHANGE="no"
+RELEASE_MODE="no"
 while [ $# -gt 0 ]; do
   case "$1" in
     --slug)              [ $# -ge 2 ] || err "--slug requires a value"; SLUG="$2"; shift 2 ;;
     --no-status-change)  NO_STATUS_CHANGE="yes"; shift ;;
+    --release)           RELEASE_MODE="yes"; shift ;;
     *) shift ;;
   esac
 done
 
-[ -n "$SLUG" ] || err "Usage: claim-thread.sh --slug <slug> [--no-status-change]"
+[ -n "$SLUG" ] || err "Usage: claim-thread.sh --slug <slug> [--release] [--no-status-change]"
 
 # Populate env from resolver
 . "$SCRIPT_DIR/lib/load-env.sh"
@@ -60,10 +64,10 @@ print(proj["path"] if proj else "")
 
 [ -n "$PROJECT_PATH" ] || err "Project '$PROJECT' not found in config."
 
-python3 - "$SCRIPT_DIR/lib" "$PROJECT_PATH" "$SLUG" "$IDENTITY" "$NO_STATUS_CHANGE" <<'PY'
+python3 - "$SCRIPT_DIR/lib" "$PROJECT_PATH" "$SLUG" "$IDENTITY" "$NO_STATUS_CHANGE" "$RELEASE_MODE" <<'PY'
 import os, re, sys
 
-lib_dir, project_path, slug, identity, no_status_change = sys.argv[1:6]
+lib_dir, project_path, slug, identity, no_status_change, release_mode = sys.argv[1:7]
 sys.path.insert(0, lib_dir)
 from frontmatter import read_frontmatter_from_file
 
@@ -83,16 +87,45 @@ if not target:
 
 fm = read_frontmatter_from_file(target)
 if not fm:
-    sys.exit(f"File '{target}' has no codesync frontmatter — can't claim.")
+    sys.exit(f"File '{target}' has no codesync frontmatter — can't claim/release.")
 
 current_owner  = fm.get("owner", "")
 current_status = fm.get("status", "")
 
+# ── RELEASE MODE ────────────────────────────────────────────────
+if release_mode == "yes":
+    if not current_owner:
+        print(f"Thread is already unclaimed — no change.")
+        print(f"FILE={target}")
+        sys.exit(0)
+    if current_owner != identity:
+        sys.exit(
+            f"Thread is owned by '{current_owner}', not you ('{identity}'). "
+            f"Have them release it themselves, or claim it explicitly with "
+            f"/codesync-thread-claim {slug}."
+        )
+    # Atomic remove of the owner line
+    with open(target) as f:
+        content = f.read()
+    fm_match = re.match(r'\A(---\s*\n)(.*?\n)(---\s*\n)', content, re.DOTALL)
+    if not fm_match:
+        sys.exit(f"Couldn't locate frontmatter block in '{target}'.")
+    start, block, end = fm_match.groups()
+    new_block = re.sub(r'^  owner: [^\n]*\n', '', block, count=1, flags=re.MULTILINE)
+    new_content = start + new_block + end + content[fm_match.end():]
+    tmp_path = target + ".tmp"
+    with open(tmp_path, "w") as f:
+        f.write(new_content)
+    os.replace(tmp_path, target)
+    print(f"Released. Thread no longer owned by '{identity}'.")
+    print(f"FILE={target}")
+    sys.exit(0)
+
+# ── CLAIM MODE (default) ────────────────────────────────────────
 if current_owner and current_owner != identity:
     sys.exit(
         f"Already claimed by '{current_owner}'. If they've stepped away, "
-        f"have them release it (/codesync-thread-release {slug}) or pass "
-        f"--force to take it over (not yet implemented — talk to them first)."
+        f"have them release it (/codesync-thread-claim {slug} --release)."
     )
 
 if current_owner == identity:
@@ -121,7 +154,6 @@ start, block, end = fm_match.groups()
 if re.search(r'^  owner:', block, re.MULTILINE):
     new_block = re.sub(r'^  owner: [^\n]*', f'  owner: {identity}', block, count=1, flags=re.MULTILINE)
 else:
-    # Insert owner right after the status line (or right after codesync: if no status)
     if re.search(r'^  status:', block, re.MULTILINE):
         new_block = re.sub(r'^(  status: [^\n]*\n)', rf'\1  owner: {identity}\n', block, count=1, flags=re.MULTILINE)
     else:

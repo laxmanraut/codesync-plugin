@@ -122,14 +122,15 @@ When working in this project, follow these patterns automatically. They're what 
 - New tasks, questions, notes, decisions between collaborators: \`/codesync-thread-new\`.
 - Replies to existing threads: \`/codesync-thread-reply <slug>\`.
 - Status transitions on a thread: \`/codesync-thread-set-status <slug> <status>\`.
-- Resolved or stale threads: \`/codesync-thread-archive <slug>\`.
+- Claim a thread (so same-role teammates know to skip): \`/codesync-thread-claim <slug>\`. Release it with \`/codesync-thread-claim <slug> --release\`.
+- Archive / unarchive: \`/codesync-thread-archive <slug>\` (add \`--unarchive\` to reverse).
 - Attach files (mockups, PDFs, screenshots) to a thread: \`/codesync-thread-attach <slug> <file>...\`.
 
 ## Notes for the team
 
 (Edit this file to add project-specific instructions, vocabulary, or anything an incoming collaborator's Claude should know. This file is loaded into every Claude Code session that starts in or near this directory.)
 
-<!-- codesync-template-v3 — If you've customized this file and don't want /install-codesync to auto-update it during future re-runs, delete this comment line. The detection looks for this exact marker; without it, your edits are preserved. -->
+<!-- codesync-template-v4 — If you've customized this file and don't want /install-codesync to auto-update it during future re-runs, delete this comment line. The detection looks for this exact marker; without it, your edits are preserved. -->
 README
 fi
 

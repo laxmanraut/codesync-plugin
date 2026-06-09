@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
-# archive-thread.sh — Move a thread from _inbox/<role>/<slug>.md to
-# _archive/<role>/<slug>.md, preserving role + file contents.
+# archive-thread.sh — Archive (or unarchive) a thread file.
 #
-# Searches across every role's inbox under the active project. Refuses
-# if the destination archive path already exists (collision).
+# Default mode: move from _inbox/<role>/<slug>.md to _archive/<role>/<slug>.md.
+# With --unarchive: reverse — move from _archive/ back to _inbox/.
 #
 # Args:
-#   --slug <slug>   (required) the filename without .md
+#   --slug <slug>     (required) the filename without .md
+#   --unarchive       (optional) unarchive mode — reverses the move
 #
-# Output: ARCHIVED=<destination> and FROM=<source>.
+# Searches across every role's _inbox/ (or _archive/ in unarchive mode) under
+# the active project. Refuses if the destination already exists.
+#
+# Output: ARCHIVED=<dest> + FROM=<src> + ROLE=<role> + MOVED_ATTACHMENTS=<dir>
+# (or UNARCHIVED=<dest> in unarchive mode).
 
 set -euo pipefail
 
@@ -18,18 +22,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 log() { printf '  %s\n' "$*"; }
 err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-# Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
 . "$SCRIPT_DIR/lib/load-env.sh"
 
 SLUG=""
+UNARCHIVE_MODE="no"
 while [ $# -gt 0 ]; do
   case "$1" in
-    --slug) [ $# -ge 2 ] || err "--slug requires a value"; SLUG="$2"; shift 2 ;;
+    --slug)       [ $# -ge 2 ] || err "--slug requires a value"; SLUG="$2"; shift 2 ;;
+    --unarchive)  UNARCHIVE_MODE="yes"; shift ;;
     *) shift ;;
   esac
 done
 
-[ -n "$SLUG" ] || err "Usage: archive-thread.sh --slug <slug>"
+[ -n "$SLUG" ] || err "Usage: archive-thread.sh --slug <slug> [--unarchive]"
 
 PROJECT="${CODESYNC_PROJECT:-}"
 [ -n "$PROJECT" ] || err "No project active (CODESYNC_PROJECT unset and no .codesync/project.json marker found)."
@@ -48,12 +53,27 @@ print(proj["path"] if proj else "")
 INBOX_ROOT="$PROJECT_PATH/_inbox"
 ARCHIVE_ROOT="$PROJECT_PATH/_archive"
 
-[ -d "$INBOX_ROOT" ] || err "No _inbox/ directory in project at $PROJECT_PATH."
+# Determine source + destination roots based on mode
+if [ "$UNARCHIVE_MODE" = "yes" ]; then
+  SRC_ROOT="$ARCHIVE_ROOT"
+  DST_ROOT="$INBOX_ROOT"
+  [ -d "$SRC_ROOT" ] || err "No _archive/ directory in project at $PROJECT_PATH (nothing has been archived yet)."
+  OP_VERB="Unarchived"
+  SRC_LABEL="archive"
+  DST_LABEL="inbox"
+else
+  SRC_ROOT="$INBOX_ROOT"
+  DST_ROOT="$ARCHIVE_ROOT"
+  [ -d "$SRC_ROOT" ] || err "No _inbox/ directory in project at $PROJECT_PATH."
+  OP_VERB="Archived"
+  SRC_LABEL="inbox"
+  DST_LABEL="archive"
+fi
 
-# Find <slug>.md across all role inboxes
+# Find <slug>.md under any role dir in SRC_ROOT
 TARGET=""
 ROLE=""
-for role_dir in "$INBOX_ROOT"/*/; do
+for role_dir in "$SRC_ROOT"/*/; do
   [ -d "$role_dir" ] || continue
   candidate="${role_dir}${SLUG}.md"
   if [ -f "$candidate" ]; then
@@ -63,12 +83,12 @@ for role_dir in "$INBOX_ROOT"/*/; do
   fi
 done
 
-[ -n "$TARGET" ] || err "Thread '$SLUG' not found in any inbox of project '$PROJECT'. Run /codesync-thread-list to see what's there."
+[ -n "$TARGET" ] || err "Thread '$SLUG' not found in any $SRC_LABEL of project '$PROJECT'. Run /codesync-thread-list to see what's there."
 
-DEST_DIR="$ARCHIVE_ROOT/$ROLE"
+DEST_DIR="$DST_ROOT/$ROLE"
 DEST_PATH="$DEST_DIR/$SLUG.md"
 
-[ ! -e "$DEST_PATH" ] || err "Archive destination already exists: $DEST_PATH. Won't overwrite."
+[ ! -e "$DEST_PATH" ] || err "Destination already exists: $DEST_PATH. Won't overwrite."
 
 mkdir -p "$DEST_DIR"
 mv "$TARGET" "$DEST_PATH"
@@ -87,9 +107,13 @@ if [ -d "$SRC_ATTACH_DIR" ]; then
   fi
 fi
 
-log "Archived $TARGET → $DEST_PATH"
+log "$OP_VERB $TARGET → $DEST_PATH"
 printf '\n'
-printf 'ARCHIVED=%s\n' "$DEST_PATH"
+if [ "$UNARCHIVE_MODE" = "yes" ]; then
+  printf 'UNARCHIVED=%s\n' "$DEST_PATH"
+else
+  printf 'ARCHIVED=%s\n' "$DEST_PATH"
+fi
 printf 'FROM=%s\n' "$TARGET"
 printf 'ROLE=%s\n' "$ROLE"
 printf 'MOVED_ATTACHMENTS=%s\n' "$MOVED_ATTACHMENTS"

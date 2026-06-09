@@ -224,11 +224,7 @@ In a terminal where `CODESYNC_PROJECT=project-1` is set, run:
 
 This pairs the devices AND invites the peer to the active project's folder. Your collaborator runs the same command on their side (with their own `CODESYNC_PROJECT` set). Sync starts automatically once both sides have done it.
 
-If you want to invite an already-paired peer to a **different** project, set `CODESYNC_PROJECT` to that project and run:
-
-```
-/codesync-project-invite --peer <their-device-id>
-```
+If you want to invite an **already-paired** peer to a **different** project, set `CODESYNC_PROJECT` to that other project and run `/codesync-pair --peer <id>` again — the command is smart about it. The device-pair step is a no-op (idempotent PUT) when the peer is already known, but the project-invite still runs. One command for both fresh pairing and additional-project invites.
 
 ### Teams of 3+ — use an introducer
 
@@ -329,7 +325,7 @@ codesync handles this with **identity** and **claim**:
 /codesync-thread-claim <slug>
 ```
 
-This sets `owner: alice` in the thread's frontmatter and (by default) flips `status: todo → wip`. The other backend's session-start summary, post-turn check, and `/codesync-thread-list` all label the thread `[owned by alice]` so they know to skip it. Use `/codesync-thread-release <slug>` to return a thread to the unclaimed pool.
+This sets `owner: alice` in the thread's frontmatter and (by default) flips `status: todo → wip`. The other backend's session-start summary, post-turn check, and `/codesync-thread-list` all label the thread `[owned by alice]` so they know to skip it. To return a thread to the unclaimed pool, run the same command with `--release`: `/codesync-thread-claim <slug> --release`.
 
 The claim script refuses to overwrite an existing claim by someone else — best-effort race protection. If two people claim at the exact same instant, Syncthing's last-write-wins decides, and both copies are preserved in `.stversions/` for recovery.
 
@@ -360,7 +356,7 @@ The thread listing, the post-turn auto-check, and the session-start summary all 
 
 Claude is multimodal — once a file lands on the recipient's machine, they can ask their Claude *"open `login.png` and tell me what's on it"* and Claude reads the image / PDF directly. No special viewer needed.
 
-Re-attaching a file with the same name overwrites it (the previous version is preserved in `.stversions/` by Syncthing) — useful for shipping "v2 of this mockup" without changing the thread. Attachments move along with the thread when you `/codesync-thread-archive` or `/codesync-thread-unarchive`.
+Re-attaching a file with the same name overwrites it (the previous version is preserved in `.stversions/` by Syncthing) — useful for shipping "v2 of this mockup" without changing the thread. Attachments move along with the thread when you `/codesync-thread-archive <slug>` (or `/codesync-thread-archive <slug> --unarchive`).
 
 Constraint: attachment filenames cannot contain commas (the frontmatter field is comma-separated). Spaces and special characters are fine.
 
@@ -490,7 +486,7 @@ As threads accumulate, you'll want to move resolved/stale ones out of the active
 └── _archive/<role>/      ← preserved history, hidden by default
 ```
 
-To see archived items: `/codesync-thread-list --archive` (only archive) or `/codesync-thread-list --include-archive` (both, with `[archived]` label on archived rows). To bring something back: `/codesync-thread-unarchive <slug>`.
+To see archived items: `/codesync-thread-list --archive` (only archive) or `/codesync-thread-list --include-archive` (both, with `[archived]` label on archived rows). To bring something back: `/codesync-thread-archive <slug> --unarchive`.
 
 Status (`todo`/`wip`/`done`/`blocked`/`note`) and archive are **orthogonal**: a `done` thread can stay in the inbox until acknowledged, then be archived; a `todo` thread can be archived if deferred. Two separate dials.
 
@@ -500,26 +496,21 @@ The post-turn auto-check and session-start summary continue to surface changes i
 
 | Command | What it does |
 |---|---|
-| `/install-codesync` | First-time setup: Syncthing, plus a project picker (existing or new) and a role picker (12 predefined roles with templates, multi-select for hybrid). |
+| `/install-codesync` | First-time setup: Syncthing, project picker (existing or new), role picker (12 predefined roles with templates, multi-select for hybrid). Also auto-offers to install the status-line indicator and the `cs` shell wrapper. |
 | `/codesync-project-new` | Register an additional project. |
-| `/codesync-project-list` | List all projects on this machine; mark the active one. |
-| `/codesync-project-invite --peer <id> [--as-introducer]` | Invite an existing peer to the active project. Pass `--as-introducer` to let them introduce other peers automatically (3+ user teams). |
 | `/codesync-project-attach <project> [<role>]` | Drop a `.codesync/project.json` marker in the current dir so terminals launched here auto-resolve the project. Also offers to symlink the project's `CLAUDE.md` into the directory so Claude Code natively auto-loads project context. |
-| `/codesync-pair --peer <id> [--as-introducer]` | Pair a brand-new peer at the device level and invite them to the active project in one step. Pass `--as-introducer` for the introducer pattern (see "Teams of 3+" above). |
-| `/codesync-role-new` | Register one OR MORE roles (hybrid supported) in a project. Numbered picker of 12 predefined roles + "Custom"; each pick has a starter template you can edit. Offers a project picker (existing + "New project") if none is active, then offers to drop a `.codesync/project.json` marker in the current directory. |
-| `/codesync-role-list` | List roles in the active project; mark the active one. |
+| `/codesync-pair --peer <id> [--as-introducer]` | Pair with a peer + invite to the active project. Smart: if the peer is already device-paired, just adds them to the current project. Pass `--as-introducer` for the introducer pattern (see "Teams of 3+" above). |
+| `/codesync-role-new` | Register one OR MORE roles (hybrid supported) in a project. Numbered picker of 12 predefined roles + "Custom"; each pick has a starter template you can edit. Offers a project picker (existing + "New project") if none is active, then offers to drop a marker in the current directory. |
 | `/codesync-thread-new` | Start a new thread (note / task / decision / question) addressed to another role. Offers project + role pickers if either is unset in the terminal. |
-| `/codesync-thread-list` | List threads in your role's inbox (or all inboxes with `--all`); filter by status. Offers a project picker if none active. |
+| `/codesync-thread-list` | List threads in your role's inbox (or all inboxes with `--all`); filter by status. `--archive` / `--include-archive` for archived items. Offers a project picker if none active. |
 | `/codesync-thread-reply <slug>` | Reply to an existing thread; auto-addresses the reply back to the original sender. |
 | `/codesync-thread-set-status <slug> <status>` | Move a thread between `todo` / `wip` / `done` / `blocked` / `note` without hand-editing. |
-| `/codesync-thread-archive <slug>` | Move a thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved, just out of default views. |
-| `/codesync-thread-unarchive <slug>` | Reverse of archive — bring an archived thread back into the active inbox. |
-| `/codesync-thread-claim <slug>` | Claim a thread (sets `owner: <your-identity>` and flips `todo→wip`). For teams where two+ people share a role. |
-| `/codesync-thread-release <slug>` | Reverse of claim — clears the `owner` field, returning the thread to the unclaimed pool. |
+| `/codesync-thread-claim <slug> [--release]` | Claim a thread (sets `owner: <your-identity>` and flips `todo→wip`). Pass `--release` to give it back to the unclaimed pool. For teams where two+ people share a role. |
+| `/codesync-thread-archive <slug> [--unarchive]` | Move a thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved, just out of default views. Pass `--unarchive` to reverse. Attachments move along. |
 | `/codesync-thread-attach <slug> <file>...` | Attach one or more files (images, PDFs, HTML mockups, anything) to an existing thread. Files sync alongside the thread; listings show `[+ N attachments]`. |
 | `/codesync-doc-list` | List project-wide docs in `_docs/` — filename + first heading + size. Read-only; ask Claude to read any specific doc afterwards. |
-| `/codesync-statusline-setup` | Install codesync's status-line segment (shows `codesync ▴ N new` in Claude Code's bottom bar when there are unread items). Backs up settings.json. |
+| `/codesync-statusline-setup` | Install codesync's status-line segment (shows `codesync ▴ N new` in Claude Code's bottom bar when there are unread items). Backs up settings.json. (Auto-offered during `/install-codesync`.) |
 | `/codesync-statusline-teardown` | Remove codesync's status-line segment; restore prior statusLine. |
-| `/codesync-status` | Active project + role, Syncthing health, peers attached to the active project, folder sync state, registered roles. |
+| `/codesync-status` | When `CODESYNC_PROJECT` is set: active project + role, Syncthing health, peers, folder sync state, registered roles. When unset: lists every project on this machine + their registered roles. |
 
-All commands except `/install-codesync` and `/codesync-project-new` require `CODESYNC_PROJECT` to be set in the terminal.
+All commands except `/install-codesync`, `/codesync-project-new`, and `/codesync-status` require `CODESYNC_PROJECT` to be set in the terminal.

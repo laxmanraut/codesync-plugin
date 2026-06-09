@@ -156,13 +156,13 @@ If the seeder reported `CREATED=` (empty — i.e. CLAUDE.md already existed and 
 
 Read `<PROJECT_PATH>/CLAUDE.md`. Two cases:
 
-**Case A — Current template (v3 marker present).** If the file contains the exact comment `<!-- codesync-template-v3 -->`, it's already on the current template. Do nothing. Stay quiet.
+**Case A — Current template (v4 marker present).** If the file contains the exact comment `<!-- codesync-template-v4 -->`, it's already on the current template. Do nothing. Stay quiet.
 
-**Case B — No v3 marker.** The file is either an older default (v2 or earlier) OR a user-customized version. **We cannot reliably tell which from text alone** — a user who replaces the placeholder "Notes for the team" content with real team notes looks structurally identical to an unmodified default. So we must default to safe and let the user decide.
+**Case B — No v4 marker.** The file is either an older default (v3 or earlier) OR a user-customized version. **We cannot reliably tell which from text alone** — a user who replaces the placeholder "Notes for the team" content with real team notes looks structurally identical to an unmodified default. So we must default to safe and let the user decide.
 
 Ask the user, with a clear OVERWRITE warning, defaulting to **no**:
 
-> Your project's `CLAUDE.md` doesn't have the current (v3) template marker. v0.19 ships a richer template with a new **"actively read newly-arrived threads"** instruction in the Default behaviors section — agents now proactively read any new inbox items right after the post-turn check surfaces them, instead of waiting for you to ask. Plus the prior v0.18 ambient-behavior instructions if you're refreshing from v0.14.
+> Your project's `CLAUDE.md` doesn't have the current (v4) template marker. v0.20 ships an updated template reflecting the simplified command surface — `/codesync-thread-release` and `/codesync-thread-unarchive` are now flags on their counterparts (`--release`, `--unarchive`), and the obsolete `/codesync-project-list` / `/codesync-role-list` / `/codesync-project-invite` slash commands are gone (their functions absorbed into `/codesync-status` and `/codesync-pair`).
 >
 > **Refreshing will OVERWRITE the entire file with the new template — any custom edits will be lost.** If you've added project-specific notes in the "Notes for the team" section, those will be gone. (You can recover from Syncthing's `.stversions/` if needed.)
 >
@@ -333,6 +333,56 @@ Build a Bash command that passes one `--role <name>` per registered role. Substi
 ```
 
 The script prints `REGISTERED_ROLES=<comma-separated list>` on success. If it errors, surface the error and STOP.
+
+## Step 8b — Offer to install the status-line indicator
+
+Ask the user, defaulting to **yes**:
+
+> Want a small `codesync ▴ N new` indicator in Claude Code's bottom bar so you can see at a glance when new threads arrive? Silent when zero, fires a macOS notification when something new comes in. Non-destructive (composes with any existing status line you have). [yes] / no
+
+On **yes** (or bare enter), run:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/statusline-setup.sh"
+```
+
+Tell the user *"Installed. The indicator will appear in your bottom bar within a few seconds; macOS will ask for notification permission the first time something arrives."*
+
+On **no**, skip. Mention they can run `/codesync-statusline-setup` later if they change their mind.
+
+## Step 8c — Offer to add the `cs` shell wrapper to `~/.zshrc`
+
+The `cs` wrapper lets the user switch project+role with `cs <project> <role>` instead of two `export` commands. Convenience.
+
+First, detect the user's shell rc file:
+- If `~/.zshrc` exists → use that
+- Else if `~/.bashrc` exists → use that
+- Else → skip this step (user is on an unusual shell setup; let them add it manually)
+
+Read the rc file's content. If it already contains a `cs()` function definition (grep for `^cs\(\)` or `^function cs\(\)`), skip — don't ask, don't add.
+
+Otherwise, ask the user, defaulting to **yes**:
+
+> Want me to add a small `cs` shell function to `<rc-file-path>`? It lets you switch project+role with one command: `cs <project> <role>` (instead of `export CODESYNC_PROJECT=…; export CODESYNC_ROLE=…`). Non-destructive — just appends to your rc file. [yes] / no
+
+On **yes**, append this exact block (with a leading blank line) to the rc file:
+
+```bash
+
+# Added by codesync /install-codesync — switch project+role in one shorthand
+cs() {
+  case $# in
+    2) export CODESYNC_PROJECT="$1"; export CODESYNC_ROLE="$2"; echo "CodeSync: project=$CODESYNC_PROJECT role=$CODESYNC_ROLE" ;;
+    1) export CODESYNC_ROLE="$1"; echo "CodeSync: project=${CODESYNC_PROJECT:-(unset)} role=$CODESYNC_ROLE" ;;
+    0) echo "Usage: cs <project> <role>   or   cs <role>"; echo "Current: project=${CODESYNC_PROJECT:-(unset)} role=${CODESYNC_ROLE:-(unset)}" ;;
+    *) echo "Usage: cs <project> <role>   or   cs <role>"; return 1 ;;
+  esac
+}
+```
+
+Tell the user: *"Added. To use it in this terminal right now, run `source <rc-file-path>` (or open a new terminal)."*
+
+On **no**, skip. Note they can copy the function from the README anytime.
 
 ## Step 9 — Tell the user what's next
 
