@@ -163,8 +163,10 @@ try:
         owner  = fm.get("owner", "")
         attach_raw = fm.get("attachments", "")
         attach_count = len([a for a in attach_raw.split(",") if a.strip()]) if attach_raw else 0
+        gen_by = fm.get("generated-by", "")
         parts2 = []
         if is_archive: parts2.append("[archived]")
+        if gen_by == "auto": parts2.append("[auto]")
         if addressed_to and len(filter_roles) > 1:
             parts2.append(f"[→{addressed_to}]")
         if status:     parts2.append(f"[{status}]")

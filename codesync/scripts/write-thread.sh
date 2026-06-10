@@ -33,16 +33,18 @@ STATUS="note"
 REPLIES_TO=""
 BODY_FILE=""
 PROJECT="${CODESYNC_PROJECT:-}"
+GENERATED_BY=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --to)         [ $# -ge 2 ] || err "--to requires a value"; TO="$2"; shift 2 ;;
-    --title)      [ $# -ge 2 ] || err "--title requires a value"; TITLE="$2"; shift 2 ;;
-    --from)       [ $# -ge 2 ] || err "--from requires a value"; FROM="$2"; shift 2 ;;
-    --status)     [ $# -ge 2 ] || err "--status requires a value"; STATUS="$2"; shift 2 ;;
-    --replies-to) [ $# -ge 2 ] || err "--replies-to requires a value"; REPLIES_TO="$2"; shift 2 ;;
-    --body-file)  [ $# -ge 2 ] || err "--body-file requires a value"; BODY_FILE="$2"; shift 2 ;;
-    --project)    [ $# -ge 2 ] || err "--project requires a value"; PROJECT="$2"; shift 2 ;;
+    --to)           [ $# -ge 2 ] || err "--to requires a value"; TO="$2"; shift 2 ;;
+    --title)        [ $# -ge 2 ] || err "--title requires a value"; TITLE="$2"; shift 2 ;;
+    --from)         [ $# -ge 2 ] || err "--from requires a value"; FROM="$2"; shift 2 ;;
+    --status)       [ $# -ge 2 ] || err "--status requires a value"; STATUS="$2"; shift 2 ;;
+    --replies-to)   [ $# -ge 2 ] || err "--replies-to requires a value"; REPLIES_TO="$2"; shift 2 ;;
+    --body-file)    [ $# -ge 2 ] || err "--body-file requires a value"; BODY_FILE="$2"; shift 2 ;;
+    --project)      [ $# -ge 2 ] || err "--project requires a value"; PROJECT="$2"; shift 2 ;;
+    --generated-by) [ $# -ge 2 ] || err "--generated-by requires a value"; GENERATED_BY="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -103,9 +105,9 @@ except Exception:
     print("")
 ' "$CFG_FILE")
 
-FRONTMATTER=$(python3 - "$FROM" "$TO" "$STATUS" "$TITLE" "$CREATED" "$REPLIES_TO" "$IDENTITY" <<'PY'
+FRONTMATTER=$(python3 - "$FROM" "$TO" "$STATUS" "$TITLE" "$CREATED" "$REPLIES_TO" "$IDENTITY" "$GENERATED_BY" <<'PY'
 import sys
-frm, to, status, title, created, replies_to, identity = sys.argv[1:8]
+frm, to, status, title, created, replies_to, identity, generated_by = sys.argv[1:9]
 lines = ["---", "codesync:"]
 lines.append(f"  from: {frm}")
 if identity:
@@ -117,6 +119,8 @@ lines.append(f'  title: "{title_esc}"')
 lines.append(f"  created: {created}")
 if replies_to:
     lines.append(f"  replies-to: {replies_to}")
+if generated_by:
+    lines.append(f"  generated-by: {generated_by}")
 lines.append("---")
 print("\n".join(lines))
 PY

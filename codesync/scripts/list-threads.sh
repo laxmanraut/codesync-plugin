@@ -119,6 +119,7 @@ for d, is_arch in scan_dirs:
             "fromRole": fm.get("from", ""),
             "fromIdentity": fm.get("from-identity", ""),
             "owner":  fm.get("owner", ""),
+            "generated_by": fm.get("generated-by", ""),
             "toRole":   fm.get("to", os.path.basename(d)),
             "title":  fm.get("title", "") or fn[:-3],
             "age":    short_age(mtime),
@@ -166,9 +167,10 @@ for e in entries:
         if e["owner"]:
             owner_label = f"[owned by {e['owner']}] "
     attach_label = f" [+ {e['attachment_count']} attachment{'s' if e['attachment_count'] != 1 else ''}]" if e['attachment_count'] else ""
+    auto_label = "[auto] " if e.get("generated_by") == "auto" else ""
     if len(title) > 50:
         title = title[:47] + "..."
-    title = (arch_prefix + owner_label + title + attach_label).ljust(60)
+    title = (arch_prefix + auto_label + owner_label + title + attach_label).ljust(60)
     # Build "from" string — show role/identity if both present
     if e['fromRole'] and e['fromIdentity']:
         fr = f"from {e['fromRole']}/{e['fromIdentity']}"

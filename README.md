@@ -476,6 +476,32 @@ The status line refreshes every few seconds. Sending any message forces an immed
 
 **Real-time alert when something new arrives.** Whenever the unread count climbs (e.g., 0 → 1, or 3 → 5 if a batch syncs in), the status-line script also fires a native **macOS notification** with the system "Glass" alert sound — *"2 new threads for backend in project-1"* — so you don't have to be looking at the bottom bar to know something arrived. Only fires on increase (silent on first run, silent when the count is steady or goes down). Uses macOS's built-in `osascript` — no extra install needed; grant notification permission once when prompted.
 
+## Autopilot — queued threads get picked up even when Claude isn't open
+
+The inbox is already a durable queue: threads wait on disk, delivered by Syncthing, surviving reboots and offline periods. By default they're consumed when you next open Claude Code. The **autopilot** closes the remaining gap — pickup with nobody at the keyboard.
+
+```
+/codesync-autopilot on
+```
+
+Installs a per-project `launchd` job that polls every 15 minutes, around the clock. Each cycle:
+
+1. A **zero-token pre-check** (pure bash) looks for never-before-processed threads in your registered roles' inboxes. Nothing new → exit. A quiet inbox costs nothing.
+2. If new threads exist, a **headless Claude session** (`claude -p`) triages them:
+   - **Questions answerable from project-local knowledge** (`_docs/`, `_roles/`, existing threads) get an automatic reply — tagged `generated-by: auto` in frontmatter and `[auto]` in every listing, so humans always know which replies came from a machine.
+   - **Everything else** — tasks, code work, anything requiring judgment — stays untouched in the inbox for you.
+
+**Safety rails (all enforced in the runner, not just prompt-level):**
+
+- **Loop brake #1:** autopilots never process threads tagged `generated-by: auto` — so two machines' autopilots can't ping-pong each other.
+- **Loop brake #2:** each thread is processed at most once, ever (tracked in local state).
+- **Rate cap:** max 4 headless runs per rolling hour (override via `CODESYNC_AUTOPILOT_MAX_RUNS_PER_HOUR`).
+- **Narrow permissions:** the headless session is restricted to reading files and invoking the thread-writing script — it cannot claim, archive, change status, or touch anything outside the inbox.
+
+`/codesync-autopilot status` shows whether the job is loaded, recent runs, and the log tail. `/codesync-autopilot off` removes it. Activity is logged to `~/.config/codesync/autopilot-<project>.log` — check it each morning to see what your agent did overnight.
+
+**Cost note:** each run that finds new threads is a real Claude API session. Quiet cycles are free; busy days cost roughly one short session per batch of arrivals, capped by the rate limit.
+
 ## Archiving resolved threads
 
 As threads accumulate, you'll want to move resolved/stale ones out of the active inbox without deleting them. Use `/codesync-thread-archive <slug>` — it moves the file from `_inbox/<role>/<slug>.md` to `_archive/<role>/<slug>.md`. The file is preserved with its frontmatter and body intact (plus any attachments — those move along with the thread); it just stops appearing in `/codesync-thread-list`'s default view.
@@ -509,6 +535,7 @@ The post-turn auto-check and session-start summary continue to surface changes i
 | `/codesync-thread-archive <slug> [--unarchive]` | Move a thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved, just out of default views. Pass `--unarchive` to reverse. Attachments move along. |
 | `/codesync-thread-attach <slug> <file>...` | Attach one or more files (images, PDFs, HTML mockups, anything) to an existing thread. Files sync alongside the thread; listings show `[+ N attachments]`. |
 | `/codesync-doc-list` | List project-wide docs in `_docs/` — filename + first heading + size. Read-only; ask Claude to read any specific doc afterwards. |
+| `/codesync-autopilot [on\|off\|status]` | Background pickup of queued threads: a launchd job polls every 15 min and a headless Claude auto-replies to doc-answerable questions (tagged `[auto]`). Loop brakes + 4-runs/hour cap built in. |
 | `/codesync-statusline-setup` | Install codesync's status-line segment (shows `codesync ▴ N new` in Claude Code's bottom bar when there are unread items). Backs up settings.json. (Auto-offered during `/install-codesync`.) |
 | `/codesync-statusline-teardown` | Remove codesync's status-line segment; restore prior statusLine. |
 | `/codesync-status` | When `CODESYNC_PROJECT` is set: active project + role, Syncthing health, peers, folder sync state, registered roles. When unset: lists every project on this machine + their registered roles. |

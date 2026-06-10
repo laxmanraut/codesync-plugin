@@ -99,6 +99,7 @@ try:
                 "from":   fm.get("from", ""),
                 "from_id": fm.get("from-identity", ""),
                 "owner":   fm.get("owner", ""),
+                "generated_by": fm.get("generated-by", ""),
                 "attach_count": attach_count,
                 "mtime":  mtime,
                 "age":    short_age(mtime),
@@ -191,6 +192,7 @@ try:
             if len(title) > 50:
                 title = title[:47] + "..."
             owner_tag = f" [owned by {e['owner']}]" if e["owner"] else ""
+            auto_tag = " [auto]" if e.get("generated_by") == "auto" else ""
             attach_tag = f" [+ {e['attach_count']} attachment{'s' if e['attach_count'] != 1 else ''}]" if e["attach_count"] else ""
             if e["from"] and e["from_id"]:
                 from_str = f"from {e['from']}/{e['from_id']}"
@@ -198,7 +200,7 @@ try:
                 from_str = f"from {e['from']}"
             else:
                 from_str = "no from"
-            print(f"    {tag} {title}{owner_tag}{attach_tag} ({from_str}, {e['age']})")
+            print(f"    {tag} {title}{auto_tag}{owner_tag}{attach_tag} ({from_str}, {e['age']})")
         if len(entries) > per_role_top:
             print(f"    …and {len(entries) - per_role_top} more")
 
