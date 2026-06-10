@@ -27,6 +27,9 @@ $PY_BIN - "$SCRIPT_DIR/lib" "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE
 import json, os, sys, time
 
 try:
+    # Native Windows Python defaults stdout to cp1252 — any non-ASCII char in
+    # a thread title would raise UnicodeEncodeError and kill the whole report.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     # All paths arrive as argv (MSYS converts argv for native python.exe;
     # Python-side expanduser would resolve USERPROFILE, not bash's $HOME).
     lib_dir, cfg_path, active_project, active_role, seen_log, baseline_path = sys.argv[1:7]
@@ -72,7 +75,11 @@ try:
                 continue
             full = os.path.join(root, fn)
             try:
-                current[os.path.relpath(full, proj_path)] = os.path.getmtime(full)
+                # Forward slashes always: relpath yields backslashes on
+                # Windows, breaking every startswith("_inbox/") check and
+                # forking the baseline/seen-log key space per platform.
+                rel = os.path.relpath(full, proj_path).replace(os.sep, "/")
+                current[rel] = os.path.getmtime(full)
             except OSError:
                 pass
 

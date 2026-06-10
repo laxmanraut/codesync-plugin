@@ -70,6 +70,9 @@ OUTPUT=$($PY_BIN - "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" "$SE
 import json, os, sys, time
 
 try:
+    # Native Windows Python defaults stdout to cp1252 — the ▴ in the segment
+    # would raise UnicodeEncodeError and silently kill the whole scan.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     # All paths arrive as argv (MSYS converts argv for native python.exe;
     # Python-side expanduser would resolve USERPROFILE, not bash's $HOME).
     cfg_path, project, role, seen_log, baseline_path = sys.argv[1:6]
@@ -126,7 +129,9 @@ try:
             if not fn.endswith(".md") or fn == "README.md":
                 continue
             full = os.path.join(d, fn)
-            rel = os.path.relpath(full, proj_path)
+            # Forward slashes always: relpath yields backslashes on Windows,
+            # which would fork the seen-log/baseline key space per platform.
+            rel = os.path.relpath(full, proj_path).replace(os.sep, "/")
             try:
                 mtime = os.path.getmtime(full)
             except OSError:

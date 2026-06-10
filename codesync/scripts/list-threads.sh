@@ -38,6 +38,10 @@ ROLE="${CODESYNC_ROLE:-}"
 
 $PY_BIN - "$SCRIPT_DIR/lib" "$CFG_FILE" "$PROJECT" "$ROLE" "$FILTER_STATUS" "$ALL_INBOXES" "$SOURCE_MODE" <<'PY'
 import json, os, sys, time
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # cp1252 default on Windows
+except Exception:
+    pass
 
 lib_dir, cfg_path, project, role, filter_status, all_inboxes, source_mode = sys.argv[1:8]
 sys.path.insert(0, lib_dir)
@@ -114,7 +118,7 @@ for d, is_arch in scan_dirs:
         attachments_list = [a.strip() for a in attachments_raw.split(",") if a.strip()] if attachments_raw else []
         entries.append({
             "path":   path,
-            "rel":    os.path.relpath(path, proj_path),
+            "rel":    os.path.relpath(path, proj_path).replace(os.sep, "/"),
             "status": fm.get("status", ""),
             "fromRole": fm.get("from", ""),
             "fromIdentity": fm.get("from-identity", ""),

@@ -27,6 +27,10 @@ ACTIVE_PROJECT="${CODESYNC_PROJECT:-}"
 if [ -z "$ACTIVE_PROJECT" ]; then
   $PY_BIN - "$CFG_FILE" <<'PY'
 import json, sys
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # cp1252 default on Windows
+except Exception:
+    pass
 cfg = json.load(open(sys.argv[1]))
 projects = cfg.get("projects", {})
 identity = cfg.get("identity", "")
@@ -59,6 +63,10 @@ fi
 # Confirm the project exists in config
 PROJECT_EXISTS=$($PY_BIN -c '
 import json, sys
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # cp1252 default on Windows
+except Exception:
+    pass
 cfg = json.load(open(sys.argv[1]))
 print("yes" if sys.argv[2] in cfg.get("projects", {}) else "no")
 ' "$CFG_FILE" "$ACTIVE_PROJECT")
@@ -72,6 +80,10 @@ fi
 
 $PY_BIN - "$CFG_FILE" "$API" "$API_KEY" "$STATUS_OK" "$ACTIVE_PROJECT" <<'PY'
 import json, os, sys, urllib.request, urllib.error
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # cp1252 default on Windows
+except Exception:
+    pass
 
 cfg_path, api, api_key, status_ok, project_name = sys.argv[1:6]
 

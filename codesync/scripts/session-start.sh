@@ -24,6 +24,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 $PY_BIN - "$SCRIPT_DIR/lib" "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" <<'PY' 2>/dev/null
 import json, os, sys, time
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # cp1252 default on Windows
+except Exception:
+    pass
 
 try:
     lib_dir, cfg_path, active_project, active_role = sys.argv[1:5]
