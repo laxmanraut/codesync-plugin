@@ -41,7 +41,7 @@ PROJECT="${CODESYNC_PROJECT:-}"
 
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-PROJECT_PATH=$(python3 -c '
+PROJECT_PATH=$($PY_BIN -c '
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 proj = cfg.get("projects", {}).get(sys.argv[2])

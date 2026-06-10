@@ -1,33 +1,74 @@
 #!/usr/bin/env bash
 # status-line.sh — Output the codesync segment for Claude Code's status line.
 #
-# Fast (< 100ms): scans the active project's _inbox/<role>/ once and
-# counts files not present in the per-project Stop-hook baseline (i.e.,
-# arrived since the last Claude turn ended).
+# Claude Code's harness re-invokes this command every few seconds while a
+# session is open (the script does not self-schedule). Budget: <100ms.
+#
+# v0.22.0 design (M1, eng-review 6A + OV7 + OV12):
+#   1. PURE-BASH mtime fast path — if no inbox file is newer than the last
+#      full scan, print the cached segment and exit WITHOUT spawning Python.
+#      Protects the latency budget on Windows, where process spawn is slow.
+#   2. Full scan (Python) — count unread (vs the Stop-hook baseline, as
+#      before) AND determine never-before-seen threads via the shared
+#      first-seen log (~/.config/codesync/seen-<project>.log).
+#   3. Notification fires ONLY for never-seen threads; the seen-log is the
+#      cross-session dedup: any number of concurrent Claude sessions share
+#      it, so one arrival = one notification total (OV12), and every entry
+#      doubles as wedge instrumentation — time-to-notice is measured as
+#      file mtime → seen-log timestamp (OV7).
 #
 # Outputs:
-#   codesync ▴ N new       when N >= 1 unseen items
-#   (nothing)              when no project active, no role active and
-#                          --all not present, or N == 0
-#
+#   codesync ▴ N new       when N >= 1 unread-since-last-turn items
+#   (nothing)              when no project active or N == 0
 # Silent on every error path so it never breaks the user's status line.
 
 CFG_FILE="$HOME/.config/codesync/config.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 [ -f "$CFG_FILE" ] || exit 0
-command -v python3 >/dev/null 2>&1 || exit 0
 
 # Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
-. "$SCRIPT_DIR/lib/load-env.sh" 2>/dev/null
+. "$SCRIPT_DIR/lib/load-env.sh"
+[ -n "${PY_BIN:-}" ] || exit 0
 
 [ -n "${CODESYNC_PROJECT:-}" ] || exit 0
 
-python3 - "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" <<'PY' 2>/dev/null
-import json, os, sys
+STATE_DIR="$HOME/.config/codesync"
+SCAN_MARKER="$STATE_DIR/.statusline-scan-$CODESYNC_PROJECT"
+CACHE_FILE="$STATE_DIR/.statusline-cache-$CODESYNC_PROJECT"
+SEEN_LOG="$STATE_DIR/seen-$CODESYNC_PROJECT.log"
+PROJ_PTR="$STATE_DIR/.statusline-path-$CODESYNC_PROJECT"
+
+# ── 1. Pure-bash mtime fast path ─────────────────────────────────────────────
+if [ -f "$PROJ_PTR" ] && [ -f "$SCAN_MARKER" ]; then
+  PROJ_PATH=$(cat "$PROJ_PTR" 2>/dev/null)
+  if [ -n "$PROJ_PATH" ] && [ -d "$PROJ_PATH/_inbox" ]; then
+    MARKER_M=$(codesync_mtime "$SCAN_MARKER")
+    NEWEST=0
+    for d in "$PROJ_PATH/_inbox"/*/; do
+      [ -d "$d" ] || continue
+      M=$(codesync_mtime "$d")
+      [ "$M" -gt "$NEWEST" ] 2>/dev/null && NEWEST=$M
+      for f in "$d"*.md; do
+        [ -f "$f" ] || continue
+        M=$(codesync_mtime "$f")
+        [ "$M" -gt "$NEWEST" ] 2>/dev/null && NEWEST=$M
+      done
+    done
+    if [ "$NEWEST" -le "$MARKER_M" ] 2>/dev/null; then
+      # Nothing changed since the last full scan — cached output, zero Python.
+      [ -f "$CACHE_FILE" ] && cat "$CACHE_FILE"
+      exit 0
+    fi
+  fi
+fi
+
+# ── 2+3. Full scan (Python): unread count + first-seen notification ─────────
+OUTPUT=$($PY_BIN - "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" "$SEEN_LOG" <<'PY' 2>/dev/null
+import json, os, sys, time
 
 try:
-    cfg_path, project, role = sys.argv[1:4]
+    cfg_path, project, role, seen_log = sys.argv[1:5]
     cfg = json.load(open(cfg_path))
     proj = cfg.get("projects", {}).get(project)
     if not proj:
@@ -40,6 +81,8 @@ try:
     if not os.path.isdir(inbox_root):
         sys.exit(0)
 
+    print(f"PROJPATH\t{proj_path}")
+
     baseline_path = os.path.expanduser(f"~/.config/codesync/baseline-{project}.json")
     baseline = {}
     if os.path.exists(baseline_path):
@@ -49,22 +92,30 @@ try:
         except Exception:
             baseline = {}
 
-    # Scan inboxes for: (1) all roles registered for this device in this
-    # project (preferred), else (2) just CODESYNC_ROLE if set, else (3) all
-    # inboxes under the project.
     registered = proj.get("roles", []) or []
     if registered:
         scan_dirs = [os.path.join(inbox_root, r) for r in registered]
     elif role:
         scan_dirs = [os.path.join(inbox_root, role)]
     else:
-        scan_dirs = [
-            os.path.join(inbox_root, d)
-            for d in os.listdir(inbox_root)
-            if os.path.isdir(os.path.join(inbox_root, d))
-        ]
+        scan_dirs = [os.path.join(inbox_root, d)
+                     for d in os.listdir(inbox_root)
+                     if os.path.isdir(os.path.join(inbox_root, d))]
 
-    new_count = 0
+    # Shared first-seen log: slug-keyed dedup across ALL sessions + wedge metric
+    seen = set()
+    if os.path.exists(seen_log):
+        try:
+            with open(seen_log) as f:
+                for line in f:
+                    parts = line.rstrip("\n").split("\t")
+                    if parts and parts[0]:
+                        seen.add(parts[0])
+        except Exception:
+            pass
+
+    new_count = 0       # unread since last Claude turn (baseline-relative)
+    unseen = []         # never-notified threads (seen-log-relative)
     for d in scan_dirs:
         if not os.path.isdir(d):
             continue
@@ -80,72 +131,53 @@ try:
             base_mtime = baseline.get(rel)
             if base_mtime is None or mtime > base_mtime:
                 new_count += 1
+            if rel not in seen:
+                unseen.append(rel)
 
-    # Track previous count to detect transitions upward (= "new arrival").
-    # Stored per project in ~/.config/codesync/.statusline-count-<project>.
-    # On first run for a project: silently establish baseline, no notification.
-    # On increase: fire macOS notification + system sound.
-    # On steady or decrease: silent.
-    count_path = os.path.expanduser(
-        f"~/.config/codesync/.statusline-count-{project}"
-    )
-    prev_count = None
-    if os.path.exists(count_path):
+    # Mark unseen as seen (append-only, O_APPEND). The same-instant window
+    # where two sessions both append is accepted: duplicate log lines are
+    # harmless, and each process only notifies for what IT discovered after
+    # re-reading the log — sequential invocations dedup perfectly.
+    if unseen:
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         try:
-            with open(count_path) as f:
-                prev_count = int(f.read().strip())
-        except Exception:
-            prev_count = None
-
-    # Write current count back so the next invocation has the "prev"
-    try:
-        os.makedirs(os.path.dirname(count_path), exist_ok=True)
-        with open(count_path, "w") as f:
-            f.write(str(new_count))
-    except Exception:
-        pass
-
-    # Emit notification on UPWARD transition (and only after a prev value
-    # exists — don't notify on first run for a project, which would be
-    # spurious if the user opens Claude with 3 already-unread).
-    if prev_count is not None and new_count > prev_count:
-        delta = new_count - prev_count
-        if registered:
-            role_label = "+".join(registered)
-        elif role:
-            role_label = role
-        else:
-            role_label = "your inbox"
-        # Build a notification body. Avoid single quotes (they'd break the
-        # outer single-quoted shell arg). Project/role names are validated
-        # to be kebab/snake-case identifiers so they don't carry quotes
-        # themselves.
-        if delta == 1:
-            body = f"1 new thread for {role_label} in {project}"
-        else:
-            body = f"{delta} new threads for {role_label} in {project}"
-        # Escape double quotes + backslashes for AppleScript string safety.
-        body_esc = body.replace('\\', '\\\\').replace('"', '\\"')
-        title_esc = "codesync"
-        try:
-            # osascript is built into macOS, no extra install needed.
-            # "Glass" is a default macOS alert tone — short, distinguishable
-            # from Slack / Mail. Run in background so the status-line stays
-            # under its <100ms budget.
-            os.system(
-                f'osascript -e \'display notification "{body_esc}" '
-                f'with title "{title_esc}" sound name "Glass"\' '
-                f'>/dev/null 2>&1 &'
-            )
+            fd = os.open(seen_log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            with os.fdopen(fd, "a") as f:
+                for rel in unseen:
+                    f.write(f"{rel}\t{stamp}\n")
         except Exception:
             pass
 
-    if new_count <= 0:
-        sys.exit(0)
+    print(f"NOTIFY\t{len(unseen)}")
 
-    cap = min(new_count, 9)
-    plus = "+" if new_count > 9 else ""
-    print(f"codesync ▴ {cap}{plus} new")
+    if new_count > 0:
+        cap = min(new_count, 9)
+        plus = "+" if new_count > 9 else ""
+        print(f"SEGMENT\tcodesync ▴ {cap}{plus} new")
+    else:
+        print("SEGMENT\t")
 except Exception:
     pass
 PY
+)
+
+PROJ_PATH=$(printf '%s\n' "$OUTPUT" | awk -F'\t' '$1=="PROJPATH"{print $2; exit}')
+NOTIFY_N=$(printf '%s\n' "$OUTPUT" | awk -F'\t' '$1=="NOTIFY"{print $2; exit}')
+SEGMENT=$(printf '%s\n' "$OUTPUT" | awk -F'\t' '$1=="SEGMENT"{print $2; exit}')
+
+mkdir -p "$STATE_DIR" 2>/dev/null
+[ -n "$PROJ_PATH" ] && printf '%s\n' "$PROJ_PATH" > "$PROJ_PTR" 2>/dev/null
+printf '%s\n' "${SEGMENT:-}" > "$CACHE_FILE" 2>/dev/null
+touch "$SCAN_MARKER" 2>/dev/null
+
+# Fire ONE notification for this batch of never-seen threads
+if [ -n "$NOTIFY_N" ] && [ "$NOTIFY_N" -gt 0 ] 2>/dev/null; then
+  if [ "$NOTIFY_N" = "1" ]; then
+    codesync_notify "codesync" "1 new thread in $CODESYNC_PROJECT"
+  else
+    codesync_notify "codesync" "$NOTIFY_N new threads in $CODESYNC_PROJECT"
+  fi
+fi
+
+[ -n "${SEGMENT:-}" ] && printf '%s\n' "$SEGMENT"
+exit 0

@@ -36,7 +36,7 @@ ROLE="${CODESYNC_ROLE:-}"
 
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-python3 - "$SCRIPT_DIR/lib" "$CFG_FILE" "$PROJECT" "$ROLE" "$FILTER_STATUS" "$ALL_INBOXES" "$SOURCE_MODE" <<'PY'
+$PY_BIN - "$SCRIPT_DIR/lib" "$CFG_FILE" "$PROJECT" "$ROLE" "$FILTER_STATUS" "$ALL_INBOXES" "$SOURCE_MODE" <<'PY'
 import json, os, sys, time
 
 lib_dir, cfg_path, project, role, filter_status, all_inboxes, source_mode = sys.argv[1:8]

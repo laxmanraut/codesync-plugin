@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # install-syncthing.sh — Machine-level CodeSync setup (v0.5.0+).
-# - Installs Syncthing via Homebrew if missing.
-# - Starts it as a brew service if not running.
+# - macOS:   installs Syncthing via Homebrew, runs it as a brew service.
+# - Windows: installs Python (if missing — D13) and Syncthing via winget,
+#            launches Syncthing detached in THIS session (OV5 — the startup
+#            shortcut only fires on next login), and registers a Startup-
+#            folder shortcut so it survives reboots.
 # - Reads the Syncthing API key + Device ID and persists them to
 #   ~/.config/codesync/config.json, alongside an (initially empty)
 #   projects map. Project folders are created by create-project.sh.
@@ -9,45 +12,121 @@
 
 set -euo pipefail
 
-CONFIG_XML="$HOME/Library/Application Support/Syncthing/config.xml"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/platform.sh"
+
 API="http://127.0.0.1:8384"
 CFG_DIR="$HOME/.config/codesync"
 CFG_FILE="$CFG_DIR/config.json"
+CONFIG_XML="$(codesync_syncthing_config_dir)/config.xml"
 
 log() { printf '  %s\n' "$*"; }
 err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-# 1. Prerequisites
-command -v brew    >/dev/null 2>&1 || err "Homebrew required. Install from https://brew.sh and re-run."
-command -v python3 >/dev/null 2>&1 || err "python3 required (ships with macOS)."
-command -v curl    >/dev/null 2>&1 || err "curl required."
+# ── 1. Prerequisites + Syncthing install/start (per platform) ────────────────
+command -v curl >/dev/null 2>&1 || err "curl required."
 
-# 2. Install Syncthing if missing
-if ! command -v syncthing >/dev/null 2>&1; then
-  log "Installing syncthing via Homebrew..."
-  brew install syncthing >/dev/null
+if [ "$CODESYNC_OS" = "windows" ]; then
+  # Package manager: winget ships with Windows 10 1709+/11 via App Installer.
+  command -v winget >/dev/null 2>&1 || err "winget (Windows Package Manager) not found. Install 'App Installer' from the Microsoft Store (https://aka.ms/getwinget), then re-run /install-codesync."
+
+  # Python auto-install (D13): PY_BIN is empty when no working Python exists
+  # (the Microsoft Store stub is filtered out by the platform layer).
+  if [ -z "$PY_BIN" ]; then
+    log "No working Python found — installing via winget (user scope, ~30s)..."
+    winget install -e --id Python.Python.3.12 --scope user \
+      --accept-package-agreements --accept-source-agreements >/dev/null \
+      || err "winget could not install Python. Install it manually from https://python.org and re-run."
+    # winget updates PATH for NEW shells only; locate the fresh install directly.
+    for cand in "$(cygpath -u "$LOCALAPPDATA")/Programs/Python/Python312/python.exe" \
+                "$(command -v python3 2>/dev/null || true)" \
+                "$(command -v python 2>/dev/null || true)"; do
+      [ -n "$cand" ] && [ -x "$cand" ] && "$cand" -c 'import sys' >/dev/null 2>&1 && PY_BIN="$cand" && break
+    done
+    [ -n "$PY_BIN" ] || err "Python installed but not yet on PATH. Close this terminal, open a new one, and re-run /install-codesync."
+    log "Python ready: $PY_BIN"
+  fi
+
+  # Install Syncthing if missing
+  if ! command -v syncthing >/dev/null 2>&1; then
+    log "Installing syncthing via winget..."
+    winget install -e --id Syncthing.Syncthing \
+      --accept-package-agreements --accept-source-agreements >/dev/null \
+      || err "winget could not install Syncthing. See https://syncthing.net/downloads/ for a manual install, then re-run."
+    # Same PATH caveat: find the binary for THIS session.
+    if ! command -v syncthing >/dev/null 2>&1; then
+      SYNCTHING_EXE=$(find "$(cygpath -u "$LOCALAPPDATA")/Microsoft/WinGet" \
+        "$(cygpath -u "$PROGRAMFILES")" \
+        -maxdepth 4 -name syncthing.exe 2>/dev/null | head -1)
+      [ -n "$SYNCTHING_EXE" ] || err "Syncthing installed but binary not found. Open a new terminal and re-run /install-codesync."
+    fi
+  else
+    log "syncthing already installed"
+  fi
+  SYNCTHING_EXE="${SYNCTHING_EXE:-$(command -v syncthing)}"
+
+  # Launch detached IN THIS SESSION if not already running (OV5). The Startup
+  # shortcut below only takes effect at next login — without this, the rest
+  # of the install (API wait) would hang forever on first run.
+  if ! curl -s -o /dev/null "$API" 2>/dev/null && ! tasklist 2>/dev/null | grep -qi 'syncthing.exe'; then
+    log "Starting syncthing (background, no browser)..."
+    SYNCTHING_WIN=$(cygpath -w "$SYNCTHING_EXE")
+    cmd //c start "codesync-syncthing" //b "$SYNCTHING_WIN" -no-browser -no-restart >/dev/null 2>&1 || true
+    log "NOTE: if Windows Defender Firewall pops up, click 'Allow access'"
+    log "      (private networks is enough) — Syncthing needs it to reach peers."
+  else
+    log "syncthing already running"
+  fi
+
+  # Startup-folder shortcut so Syncthing auto-starts on login (idempotent).
+  STARTUP_DIR=$(cygpath -u "$APPDATA")/Microsoft/Windows/"Start Menu"/Programs/Startup
+  if [ -d "$STARTUP_DIR" ] && [ ! -f "$STARTUP_DIR/codesync-syncthing.lnk" ]; then
+    powershell.exe -NoProfile -NonInteractive -Command "
+      \$ws = New-Object -ComObject WScript.Shell;
+      \$lnk = \$ws.CreateShortcut(\"\$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\codesync-syncthing.lnk\");
+      \$lnk.TargetPath = '$(cygpath -w "$SYNCTHING_EXE")';
+      \$lnk.Arguments = '-no-browser -no-restart';
+      \$lnk.WindowStyle = 7;
+      \$lnk.Save()" >/dev/null 2>&1 \
+      && log "Registered Syncthing in the Startup folder (auto-starts on login)" \
+      || log "WARNING: could not create the Startup shortcut — Syncthing won't auto-start after reboot. You can add it manually (Win+R → shell:startup)."
+  fi
 else
-  log "syncthing already installed"
+  # macOS path (unchanged from v0.21)
+  command -v brew >/dev/null 2>&1 || err "Homebrew required. Install from https://brew.sh and re-run."
+  [ -n "$PY_BIN" ] || err "python3 required (ships with macOS)."
+
+  if ! command -v syncthing >/dev/null 2>&1; then
+    log "Installing syncthing via Homebrew..."
+    brew install syncthing >/dev/null
+  else
+    log "syncthing already installed"
+  fi
+
+  if brew services list | awk '$1=="syncthing"{print $2}' | grep -qx started; then
+    log "syncthing service already running"
+  else
+    log "Starting syncthing service..."
+    brew services start syncthing >/dev/null
+  fi
 fi
 
-# 3. Start the brew service if not running
-if brew services list | awk '$1=="syncthing"{print $2}' | grep -qx started; then
-  log "syncthing service already running"
-else
-  log "Starting syncthing service..."
-  brew services start syncthing >/dev/null
-fi
-
-# 4. Wait for config.xml (Syncthing creates it on first run)
+# ── 2. Wait for config.xml (Syncthing creates it on first run) ───────────────
 log "Waiting for Syncthing to initialise..."
 for _ in $(seq 1 30); do
   [ -f "$CONFIG_XML" ] && break
   sleep 1
 done
-[ -f "$CONFIG_XML" ] || err "Syncthing config not found at $CONFIG_XML after 30s. Try: brew services restart syncthing"
+if [ ! -f "$CONFIG_XML" ]; then
+  if [ "$CODESYNC_OS" = "windows" ]; then
+    err "Syncthing config not found at $CONFIG_XML after 30s. Check that syncthing.exe is running (Task Manager), then re-run."
+  else
+    err "Syncthing config not found at $CONFIG_XML after 30s. Try: brew services restart syncthing"
+  fi
+fi
 
-# 5. Extract API key
-API_KEY=$(python3 - "$CONFIG_XML" <<'PY' || true
+# ── 3. Extract API key ───────────────────────────────────────────────────────
+API_KEY=$($PY_BIN - "$CONFIG_XML" <<'PY' || true
 import sys, xml.etree.ElementTree as ET
 try:
     tree = ET.parse(sys.argv[1])
@@ -62,22 +141,22 @@ PY
 )
 [ -n "${API_KEY:-}" ] || err "Could not read API key from $CONFIG_XML"
 
-# 6. Wait for REST API
+# ── 4. Wait for REST API ─────────────────────────────────────────────────────
 for _ in $(seq 1 30); do
   curl -sf -H "X-API-Key: $API_KEY" "$API/rest/system/status" >/dev/null 2>&1 && break
   sleep 1
 done
 curl -sf -H "X-API-Key: $API_KEY" "$API/rest/system/status" >/dev/null 2>&1 \
-  || err "Syncthing REST API at $API did not respond. Check 'brew services list' and ~/Library/Logs/syncthing.log."
+  || err "Syncthing REST API at $API did not respond. Check the Syncthing process is running and try again."
 
-# 7. Read Device ID
+# ── 5. Read Device ID ────────────────────────────────────────────────────────
 DEVICE_ID=$(curl -sf -H "X-API-Key: $API_KEY" "$API/rest/system/status" \
-  | python3 -c 'import sys, json; print(json.load(sys.stdin)["myID"])') \
+  | $PY_BIN -c 'import sys, json; print(json.load(sys.stdin)["myID"])') \
   || err "Could not read Device ID from Syncthing"
 
-# 8. Persist machine-level config — preserve any existing projects map
+# ── 6. Persist machine-level config — preserve any existing projects map ─────
 mkdir -p "$CFG_DIR"
-python3 - "$CFG_FILE" "$API_KEY" "$DEVICE_ID" <<'PY'
+$PY_BIN - "$CFG_FILE" "$API_KEY" "$DEVICE_ID" <<'PY'
 import json, os, sys
 cfg_path, api_key, device_id = sys.argv[1:4]
 cfg = {}
@@ -99,6 +178,6 @@ PY
 chmod 600 "$CFG_FILE"
 log "Wrote $CFG_FILE"
 
-# 9. Machine-parseable output
+# ── 7. Machine-parseable output ──────────────────────────────────────────────
 printf '\n'
 printf 'DEVICE_ID=%s\n' "$DEVICE_ID"

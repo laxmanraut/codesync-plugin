@@ -44,7 +44,7 @@ PROJECT="${CODESYNC_PROJECT:-}"
 
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-PROJECT_PATH=$(python3 -c '
+PROJECT_PATH=$($PY_BIN -c '
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 proj = cfg.get("projects", {}).get(sys.argv[2])
@@ -71,20 +71,45 @@ done
 
 [ -n "$TARGET" ] || err "Thread '$SLUG' not found in any _inbox/ or _archive/ role subdir of project '$PROJECT'. Run /codesync-thread-list to see what's there."
 
-# Validate each file: exists, readable, and the basename has no comma
+# Validate each file: exists, readable, and the basename is safe on every
+# platform the attachment will sync to. Beyond the original no-comma rule
+# (frontmatter is comma-separated), enforce the NTFS-illegal set — a Mac-side
+# name like 'mockup: v2.png' is legal on APFS but Syncthing CANNOT create it
+# on a Windows peer, silently breaking delivery (design OQ6).
 for f in "${FILES[@]}"; do
   [ -f "$f" ] || err "File not found: $f"
   [ -r "$f" ] || err "File not readable: $f"
   bn=$(basename "$f")
   case "$bn" in
     *,*) err "Attachment basename '$bn' contains a comma — the frontmatter field is comma-separated so this would break parsing. Rename the file." ;;
+    *[':?|*"<>\\']*) err "Attachment basename '$bn' contains a character that is illegal on Windows filesystems (one of : ? | * \" < > \\) — it would silently fail to sync to any Windows collaborator. Rename the file." ;;
+    *.|*' ') err "Attachment basename '$bn' ends with a dot or space — illegal on Windows filesystems. Rename the file." ;;
   esac
+  # Windows reserved device names (case-insensitive, with or without extension)
+  bn_stem=$(printf '%s' "${bn%%.*}" | tr '[:lower:]' '[:upper:]')
+  case "$bn_stem" in
+    CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])
+      err "Attachment basename '$bn' is a reserved device name on Windows ($bn_stem) — it cannot exist on a Windows peer. Rename the file." ;;
+  esac
+  # Case-collision check: NTFS is case-insensitive — 'Logo.png' and 'logo.png'
+  # cannot coexist in one directory on a Windows peer.
+  if [ -d "$ATTACH_DIR" ]; then
+    bn_lower=$(printf '%s' "$bn" | tr '[:upper:]' '[:lower:]')
+    for existing in "$ATTACH_DIR"/*; do
+      [ -e "$existing" ] || continue
+      ex_bn=$(basename "$existing")
+      ex_lower=$(printf '%s' "$ex_bn" | tr '[:upper:]' '[:lower:]')
+      if [ "$bn_lower" = "$ex_lower" ] && [ "$bn" != "$ex_bn" ]; then
+        err "Attachment '$bn' differs only by case from existing attachment '$ex_bn' — case-insensitive Windows filesystems cannot hold both. Rename the file (same-name overwrite is fine; case-variant is not)."
+      fi
+    done
+  fi
 done
 
 # Pre-flight: confirm the target file has a codesync frontmatter block we can
 # update. Failing here means NO files have been copied yet, so the user's
 # filesystem state stays clean (no orphan files in .attachments/).
-HAS_FM=$(python3 - "$TARGET" <<'PY'
+HAS_FM=$($PY_BIN - "$TARGET" <<'PY'
 import re, sys
 content = open(sys.argv[1]).read()
 print("yes" if re.match(r'\A---\s*\n.*?\n---\s*\n', content, re.DOTALL) else "no")
@@ -105,7 +130,7 @@ for f in "${FILES[@]}"; do
 done
 
 # Update frontmatter: append new filenames (comma-separated, deduped)
-python3 - "$TARGET" "${ADDED[@]}" <<'PY'
+$PY_BIN - "$TARGET" "${ADDED[@]}" <<'PY'
 import os, re, sys
 target = sys.argv[1]
 added = sys.argv[2:]

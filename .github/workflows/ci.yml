@@ -1,0 +1,44 @@
+# CI for the codesync plugin — runs the committed test suite on macOS and
+# Windows. Eng-review 1A: windows-latest defaults to PowerShell, so the shell
+# is pinned to bash at the JOB level, and a canary step asserts the scripts
+# actually run under MINGW (Git Bash) — the same environment Claude Code's
+# Bash tool uses on Windows. If GitHub ever changes which bash `shell: bash`
+# resolves to, the canary fails loudly instead of the suite passing in the
+# wrong environment.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert bash environment (Windows canary)
+        if: runner.os == 'Windows'
+        run: |
+          case "$(uname -s)" in
+            MINGW*|MSYS*) echo "OK: running under $(uname -s) (Git Bash)" ;;
+            *) echo "FATAL: expected MINGW/MSYS bash, got $(uname -s)"; exit 1 ;;
+          esac
+
+      - name: Assert no CRLF survived checkout
+        run: |
+          if grep -rIl $'\r' codesync/scripts/ tests/; then
+            echo "FATAL: CR bytes found — check .gitattributes"; exit 1
+          fi
+          echo "OK: all LF"
+
+      - name: Run test suite
+        run: bash tests/run-all.sh

@@ -13,7 +13,7 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-API_KEY=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("syncthing_api_key", ""))' "$CFG_FILE")
+API_KEY=$($PY_BIN -c 'import json,sys; print(json.load(open(sys.argv[1])).get("syncthing_api_key", ""))' "$CFG_FILE")
 [ -n "$API_KEY" ] || err "syncthing_api_key missing in $CFG_FILE. Re-run /install-codesync."
 
 # Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
@@ -25,7 +25,7 @@ ACTIVE_PROJECT="${CODESYNC_PROJECT:-}"
 # registered projects, their roles, their paths. Then exit (skip the
 # Syncthing health detail which is per-project).
 if [ -z "$ACTIVE_PROJECT" ]; then
-  python3 - "$CFG_FILE" <<'PY'
+  $PY_BIN - "$CFG_FILE" <<'PY'
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 projects = cfg.get("projects", {})
@@ -57,7 +57,7 @@ PY
 fi
 
 # Confirm the project exists in config
-PROJECT_EXISTS=$(python3 -c '
+PROJECT_EXISTS=$($PY_BIN -c '
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 print("yes" if sys.argv[2] in cfg.get("projects", {}) else "no")
@@ -70,7 +70,7 @@ if curl -sf -H "X-API-Key: $API_KEY" --max-time 5 "$API/rest/system/status" >/de
   STATUS_OK=yes
 fi
 
-python3 - "$CFG_FILE" "$API" "$API_KEY" "$STATUS_OK" "$ACTIVE_PROJECT" <<'PY'
+$PY_BIN - "$CFG_FILE" "$API" "$API_KEY" "$STATUS_OK" "$ACTIVE_PROJECT" <<'PY'
 import json, os, sys, urllib.request, urllib.error
 
 cfg_path, api, api_key, status_ok, project_name = sys.argv[1:6]

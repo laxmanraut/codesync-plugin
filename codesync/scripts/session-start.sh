@@ -17,12 +17,12 @@ CFG_FILE="$HOME/.config/codesync/config.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 [ -f "$CFG_FILE" ] || exit 0
-command -v python3 >/dev/null 2>&1 || exit 0
 
 # Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
 . "$SCRIPT_DIR/lib/load-env.sh"
+[ -n "${PY_BIN:-}" ] || exit 0
 
-python3 - "$SCRIPT_DIR/lib" "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" <<'PY' 2>/dev/null
+$PY_BIN - "$SCRIPT_DIR/lib" "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" <<'PY' 2>/dev/null
 import json, os, sys, time
 
 try:

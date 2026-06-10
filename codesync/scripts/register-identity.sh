@@ -17,6 +17,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/platform.sh"
+
 CFG_FILE="$HOME/.config/codesync/config.json"
 
 err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -64,7 +67,7 @@ fi
 
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-python3 - "$CFG_FILE" "$VALUE" <<'PY'
+$PY_BIN - "$CFG_FILE" "$VALUE" <<'PY'
 import json, sys
 cfg_path, identity = sys.argv[1], sys.argv[2]
 with open(cfg_path) as f:

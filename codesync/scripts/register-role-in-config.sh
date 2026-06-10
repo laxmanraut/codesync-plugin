@@ -12,6 +12,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/platform.sh"
+
 CFG_FILE="$HOME/.config/codesync/config.json"
 
 err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -40,7 +43,7 @@ done
 [ ${#ROLES[@]} -gt 0 ] || err "At least one --role required"
 [ -f "$CFG_FILE" ]  || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-python3 - "$CFG_FILE" "$PROJECT" "${ROLES[@]}" <<'PY'
+$PY_BIN - "$CFG_FILE" "$PROJECT" "${ROLES[@]}" <<'PY'
 import json, sys
 cfg_path = sys.argv[1]
 project  = sys.argv[2]

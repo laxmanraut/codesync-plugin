@@ -1,0 +1,19 @@
+# Line-ending discipline (Windows port, M1-T1 / review OV3).
+#
+# Claude Code installs this plugin by cloning the repo on the user's machine.
+# Git for Windows defaults core.autocrlf=true, which would check out *.sh with
+# CRLF line endings — and bash dies on the invisible \r before any script runs.
+# Pinning eol=lf here protects every future clone regardless of local config.
+
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Binary assets — never touch line endings
+*.png binary
+*.jpg binary
+*.pdf binary

@@ -38,13 +38,13 @@ fi
 
 # 3. Load machine-level config
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
-API_KEY=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["syncthing_api_key"])' "$CFG_FILE")
-DEVICE_ID=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["device_id"])' "$CFG_FILE")
+API_KEY=$($PY_BIN -c 'import json,sys; print(json.load(open(sys.argv[1]))["syncthing_api_key"])' "$CFG_FILE")
+DEVICE_ID=$($PY_BIN -c 'import json,sys; print(json.load(open(sys.argv[1]))["device_id"])' "$CFG_FILE")
 [ -n "$API_KEY"   ] || err "syncthing_api_key missing in $CFG_FILE."
 [ -n "$DEVICE_ID" ] || err "device_id missing in $CFG_FILE."
 
 # 4. Refuse if a project with this name already exists
-EXISTING=$(python3 -c '
+EXISTING=$($PY_BIN -c '
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 projects = cfg.get("projects", {})
@@ -79,6 +79,9 @@ fi
 
 # Scaffold _docs/ + CLAUDE.md via the shared seeder (idempotent).
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Platform layer: CODESYNC_OS, PY_BIN, codesync_* helpers
+. "$SCRIPT_DIR/lib/platform.sh"
 bash "$SCRIPT_DIR/seed-project-docs.sh" --project "$PROJECT_NAME" --path "$PROJECT_PATH" >/dev/null
 
 # 7. Refuse if a Syncthing folder with this ID already exists
@@ -90,7 +93,7 @@ fi
 
 # 8. Register the folder with Syncthing
 log "Registering Syncthing folder '$FOLDER_ID' at $PROJECT_PATH..."
-PAYLOAD=$(python3 - "$FOLDER_ID" "$PROJECT_PATH" "$PROJECT_NAME" <<'PY'
+PAYLOAD=$($PY_BIN - "$FOLDER_ID" "$PROJECT_PATH" "$PROJECT_NAME" <<'PY'
 import json, sys
 fid, path, label = sys.argv[1], sys.argv[2], sys.argv[3]
 print(json.dumps({
@@ -107,7 +110,7 @@ api -X PUT -H "Content-Type: application/json" --data-binary "$PAYLOAD" \
   || err "Failed to register folder with Syncthing"
 
 # 9. Add the project to config.json's projects map
-python3 - "$CFG_FILE" "$PROJECT_NAME" "$PROJECT_PATH" "$FOLDER_ID" <<'PY'
+$PY_BIN - "$CFG_FILE" "$PROJECT_NAME" "$PROJECT_PATH" "$FOLDER_ID" <<'PY'
 import json, sys
 cfg_path, name, path, folder_id = sys.argv[1:5]
 with open(cfg_path) as f:

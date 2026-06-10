@@ -33,7 +33,7 @@ PROJECT="${CODESYNC_PROJECT:-}"
 [ -n "$PROJECT" ] || err "No project active. Set CODESYNC_PROJECT (or attach this directory) first — the autopilot is configured per project."
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-PROJECT_EXISTS=$(python3 -c '
+PROJECT_EXISTS=$($PY_BIN -c '
 import json, sys
 print("yes" if sys.argv[2] in json.load(open(sys.argv[1])).get("projects", {}) else "no")
 ' "$CFG_FILE" "$PROJECT")
@@ -61,7 +61,7 @@ case "$MODE" in
       printf '  Plist:    (not installed — run /codesync-autopilot on)\n'
     fi
     if [ -f "$STATE_FILE" ]; then
-      python3 - "$STATE_FILE" <<'PY'
+      $PY_BIN - "$STATE_FILE" <<'PY'
 import json, sys, time
 state = json.load(open(sys.argv[1]))
 runs = state.get("runs", [])

@@ -15,6 +15,9 @@ SETTINGS_FILE="$SETTINGS_DIR/settings.json"
 CFG_DIR="$HOME/.config/codesync"
 PRIOR_FILE="$CFG_DIR/statusline-prior.txt"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Platform layer: CODESYNC_OS, PY_BIN, codesync_* helpers
+. "$SCRIPT_DIR/lib/platform.sh"
 WRAP_PATH="$SCRIPT_DIR/statusline-wrap.sh"
 
 log() { printf '  %s\n' "$*"; }
@@ -22,7 +25,7 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 [ -f "$SETTINGS_FILE" ] || err "$SETTINGS_FILE does not exist — nothing to tear down."
 
-CURRENT_CMD=$(python3 - "$SETTINGS_FILE" <<'PY'
+CURRENT_CMD=$($PY_BIN - "$SETTINGS_FILE" <<'PY'
 import json, sys
 try:
     with open(sys.argv[1]) as f: cfg = json.load(f)
@@ -52,7 +55,7 @@ if [ -f "$PRIOR_FILE" ]; then
 fi
 
 # Restore: either set statusLine.command back to prior, or remove the entry
-python3 - "$SETTINGS_FILE" "$PRIOR" <<'PY'
+$PY_BIN - "$SETTINGS_FILE" "$PRIOR" <<'PY'
 import json, sys
 path, prior = sys.argv[1:3]
 with open(path) as f: cfg = json.load(f)

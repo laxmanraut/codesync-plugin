@@ -29,13 +29,16 @@ set -euo pipefail
 CFG_FILE="$HOME/.config/codesync/config.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# launchd jobs get a minimal PATH; extend so claude + python3 resolve.
+# Platform layer: CODESYNC_OS, PY_BIN, codesync_* helpers
+. "$SCRIPT_DIR/lib/platform.sh"
+
+# launchd jobs get a minimal PATH; extend so claude + $PY_BIN resolve.
 export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.claude/local:$PATH"
 
 PROJECT="${CODESYNC_PROJECT:-}"
 [ -n "$PROJECT" ] || { echo "autopilot: CODESYNC_PROJECT not set" >&2; exit 1; }
 [ -f "$CFG_FILE" ] || exit 0
-command -v python3 >/dev/null 2>&1 || exit 0
+[ -n "${PY_BIN:-}" ] || exit 0
 
 STATE_FILE="$HOME/.config/codesync/autopilot-$PROJECT.json"
 LOG_FILE="$HOME/.config/codesync/autopilot-$PROJECT.log"
@@ -45,7 +48,7 @@ CLAUDE_BIN="${CODESYNC_AUTOPILOT_CLAUDE_BIN:-claude}"
 logln() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG_FILE"; }
 
 # ── 1+2. Pre-check: emit candidate thread paths, one per line ──────────────
-CANDIDATES=$(python3 - "$CFG_FILE" "$PROJECT" "$STATE_FILE" "$SCRIPT_DIR/lib" <<'PY'
+CANDIDATES=$($PY_BIN - "$CFG_FILE" "$PROJECT" "$STATE_FILE" "$SCRIPT_DIR/lib" <<'PY'
 import json, os, sys
 cfg_path, project, state_path, lib_dir = sys.argv[1:5]
 sys.path.insert(0, lib_dir)
@@ -94,7 +97,7 @@ if [ -z "$CANDIDATES" ]; then
 fi
 
 # ── 3. Rate cap (rolling hour) ──────────────────────────────────────────────
-ALLOWED=$(python3 - "$STATE_FILE" "$MAX_RUNS" <<'PY'
+ALLOWED=$($PY_BIN - "$STATE_FILE" "$MAX_RUNS" <<'PY'
 import json, os, sys, time
 state_path, max_runs = sys.argv[1], int(sys.argv[2])
 state = {"runs": [], "processed": {}}
@@ -113,11 +116,11 @@ if [ "$ALLOWED" != "yes" ]; then
   exit 0
 fi
 
-PROJ_PATH=$(python3 -c '
+PROJ_PATH=$($PY_BIN -c '
 import json, sys
 print(json.load(open(sys.argv[1]))["projects"][sys.argv[2]]["path"])
 ' "$CFG_FILE" "$PROJECT")
-IDENTITY=$(python3 -c '
+IDENTITY=$($PY_BIN -c '
 import json, sys
 print(json.load(open(sys.argv[1])).get("identity", ""))
 ' "$CFG_FILE")
@@ -161,7 +164,7 @@ logln "RUN end — claude exit $CLAUDE_EXIT"
 # ── 5. Record run + mark candidates processed ───────────────────────────────
 # Mark processed only on success; failed runs still count toward the rate cap
 # (so a hard-failing setup can't burn more than MAX_RUNS attempts per hour).
-python3 - "$STATE_FILE" "$CLAUDE_EXIT" <<PY
+$PY_BIN - "$STATE_FILE" "$CLAUDE_EXIT" <<PY
 import json, os, sys, time
 state_path, claude_exit = sys.argv[1], int(sys.argv[2])
 state = {"runs": [], "processed": {}}

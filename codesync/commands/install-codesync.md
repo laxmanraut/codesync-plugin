@@ -1,7 +1,7 @@
 ---
 description: One-time setup — install Syncthing on this machine and register a first project + role(s)
 argument-hint: "(no arguments — interactive)"
-allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/install-syncthing.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/migrate-v0.5.0.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/create-project.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-role-in-config.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-identity.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh:*)", "Bash(python3:*)"]
+allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/install-syncthing.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/create-project.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-role-in-config.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/register-identity.sh:*)", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh:*)", "Bash(python3:*)", "Bash(python:*)"]
 ---
 
 # Install CodeSync
@@ -10,7 +10,7 @@ The user invoked `/install-codesync`.
 
 This command:
 1. Installs Syncthing on this machine and reads its Device ID + API key.
-2. Migrates a legacy v0.4.x layout if one is found.
+2. (Step retired in v0.22 — the legacy v0.4.x migration was removed; the layout never shipped publicly.)
 3. Picks an existing project or creates a new one.
 4. Walks the user through registering one OR MORE roles in that project (hybrid roles supported — pick PM + Designer in one go).
 
@@ -74,34 +74,9 @@ Once the user has confirmed a value, substitute `<IDENTITY>` and run:
 
 The script prints `SAVED_IDENTITY=<value>` on success.
 
-## Step 2 — Detect whether migration is needed
+## Step 2 — (retired)
 
-Read `~/.config/codesync/config.json`. If it contains a top-level `contracts_dir` field (v0.4.x schema) AND no `projects` map, a migration is needed.
-
-If migration IS needed:
-
-1. Tell the user: *"I found an older v0.4.x layout from before projects were introduced. I need to migrate it. What's the name of this existing collaboration? It will become the name of the project (default: `lead_inbox`)."*
-2. Wait for the user's response. Default to `lead_inbox` if they press enter.
-3. Validate the name (lowercase letters, digits, dashes, underscores only). If invalid, re-ask.
-4. Run the migration script with the chosen name. Substitute `<NAME>` BEFORE invoking Bash:
-
-```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/migrate-v0.5.0.sh" "<NAME>"
-```
-
-5. The script prints `MIGRATED_PROJECT=<name>`, `PROJECT_PATH=<path>`, `FOLDER_ID=<id>`. Capture those.
-6. Set `ACTIVE_PROJECT = <name>`, `PROJECT_PATH = <path>`.
-7. Run the docs seeder (idempotent — only writes files that don't exist):
-
-```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/seed-project-docs.sh" --project "<ACTIVE_PROJECT>" --path "<PROJECT_PATH>"
-```
-
-It prints `CREATED=<comma-separated list>` of any files added (or empty if everything already existed). Mention to the user what was added (or stay quiet if nothing).
-
-8. Skip to Step 4 (existing-roles read).
-
-If migration is NOT needed, continue to Step 3.
+The legacy v0.4.x→v0.5 migration was removed in v0.22 (the pre-release layout never shipped publicly; no installation can have it). Continue directly to Step 3. *(Step numbering kept stable so later cross-references stay valid.)*
 
 ## Step 3 — Project picker
 

@@ -18,7 +18,7 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 [ -n "${CODESYNC_PROJECT:-}" ] \
   || err "No project active. Set CODESYNC_PROJECT in your shell or attach this directory with /codesync-project-attach <project>."
 
-python3 - "$CFG_FILE" "$CODESYNC_PROJECT" <<'PY'
+$PY_BIN - "$CFG_FILE" "$CODESYNC_PROJECT" <<'PY'
 import json, os, sys, re
 
 cfg_path, project = sys.argv[1:3]

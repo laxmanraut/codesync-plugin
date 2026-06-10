@@ -63,7 +63,7 @@ esac
 # Resolve project path
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-PROJECT_PATH=$(python3 -c '
+PROJECT_PATH=$($PY_BIN -c '
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 project = cfg.get("projects", {}).get(sys.argv[2])
@@ -74,7 +74,7 @@ print(project["path"] if project else "")
 [ -d "$PROJECT_PATH" ] || err "Project path $PROJECT_PATH does not exist."
 
 # Sluggify title for the filename
-SLUG=$(python3 - "$TITLE" <<'PY'
+SLUG=$($PY_BIN - "$TITLE" <<'PY'
 import re, sys
 title = sys.argv[1].lower().strip()
 slug = re.sub(r'[^a-z0-9]+', '-', title).strip('-')
@@ -91,12 +91,12 @@ TARGET_FILE="$TARGET_DIR/$SLUG.md"
 [ -e "$TARGET_FILE" ] && err "File already exists: $TARGET_FILE. Pick a different title or edit the existing file."
 
 # Build content
-CREATED=$(python3 -c 'import datetime; print(datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))')
+CREATED=$($PY_BIN -c 'import datetime; print(datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))')
 
 # Look up this machine's identity (top-level field in config). Empty string if
 # unset — older configs from before v0.15 won't have it; we omit the
 # from-identity field rather than erroring, so existing flows still work.
-IDENTITY=$(python3 -c '
+IDENTITY=$($PY_BIN -c '
 import json, sys
 try:
     cfg = json.load(open(sys.argv[1]))
@@ -105,7 +105,7 @@ except Exception:
     print("")
 ' "$CFG_FILE")
 
-FRONTMATTER=$(python3 - "$FROM" "$TO" "$STATUS" "$TITLE" "$CREATED" "$REPLIES_TO" "$IDENTITY" "$GENERATED_BY" <<'PY'
+FRONTMATTER=$($PY_BIN - "$FROM" "$TO" "$STATUS" "$TITLE" "$CREATED" "$REPLIES_TO" "$IDENTITY" "$GENERATED_BY" <<'PY'
 import sys
 frm, to, status, title, created, replies_to, identity, generated_by = sys.argv[1:9]
 lines = ["---", "codesync:"]

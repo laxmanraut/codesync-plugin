@@ -19,6 +19,9 @@ SETTINGS_FILE="$SETTINGS_DIR/settings.json"
 CFG_DIR="$HOME/.config/codesync"
 PRIOR_FILE="$CFG_DIR/statusline-prior.txt"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Platform layer: CODESYNC_OS, PY_BIN, codesync_* helpers
+. "$SCRIPT_DIR/lib/platform.sh"
 WRAP_PATH="$SCRIPT_DIR/statusline-wrap.sh"
 
 log() { printf '  %s\n' "$*"; }
@@ -30,7 +33,7 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 mkdir -p "$CFG_DIR"
 
 # Capture current state (or {} if no settings file)
-EXISTING_CMD=$(python3 - "$SETTINGS_FILE" <<'PY'
+EXISTING_CMD=$($PY_BIN - "$SETTINGS_FILE" <<'PY'
 import json, os, sys
 path = sys.argv[1]
 try:
@@ -69,7 +72,7 @@ else
 fi
 
 # Write new settings.json with our wrap as statusLine.command
-python3 - "$SETTINGS_FILE" "$WRAP_PATH" <<'PY'
+$PY_BIN - "$SETTINGS_FILE" "$WRAP_PATH" <<'PY'
 import json, os, sys
 path, wrap = sys.argv[1:3]
 try:

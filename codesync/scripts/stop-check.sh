@@ -13,18 +13,20 @@
 CFG_FILE="$HOME/.config/codesync/config.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Silent no-ops if plugin isn't installed or python3 missing
+# Silent no-ops if plugin isn't installed or $PY_BIN missing
 [ -f "$CFG_FILE" ] || exit 0
-command -v python3 >/dev/null 2>&1 || exit 0
 
 # Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
 . "$SCRIPT_DIR/lib/load-env.sh"
+[ -n "${PY_BIN:-}" ] || exit 0
 
-python3 - "$SCRIPT_DIR/lib" "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" <<'PY' 2>/dev/null
-import json, os, sys
+SEEN_LOG="$HOME/.config/codesync/seen-${CODESYNC_PROJECT:-none}.log"
+
+$PY_BIN - "$SCRIPT_DIR/lib" "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" "$SEEN_LOG" <<'PY' 2>/dev/null
+import json, os, sys, time
 
 try:
-    lib_dir, cfg_path, active_project, active_role = sys.argv[1:5]
+    lib_dir, cfg_path, active_project, active_role, seen_log = sys.argv[1:6]
     sys.path.insert(0, lib_dir)
     from frontmatter import read_frontmatter_from_file  # noqa: E402
 
@@ -210,6 +212,31 @@ try:
         items.append((f"~ {label(p)}", body_preview(p)))
     for p in sorted(deleted):
         items.append((f"- {p}", None))
+
+    # First-seen log (shared with status-line.sh): when this hook surfaces a
+    # thread for the first time, record slug + timestamp. This is BOTH the
+    # cross-session notification dedup (OV12 — a thread surfaced here won't
+    # re-toast from the status line) and the wedge instrumentation (OV7 —
+    # time-to-notice = inbox-file mtime → seen-log timestamp).
+    if seen_log and active_project:
+        seen = set()
+        if os.path.exists(seen_log):
+            try:
+                with open(seen_log) as f:
+                    seen = {l.split("\t")[0] for l in f if l.strip()}
+            except Exception:
+                seen = set()
+        surfaced = [p for p in list(new_files) + list(changed)
+                    if p.startswith("_inbox/") and p.endswith(".md") and p not in seen]
+        if surfaced:
+            stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            try:
+                fd = os.open(seen_log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+                with os.fdopen(fd, "a") as f:
+                    for p in surfaced:
+                        f.write(f"{p}\t{stamp}\n")
+            except Exception:
+                pass
 
     if not items and suppressed == 0:
         sys.exit(0)

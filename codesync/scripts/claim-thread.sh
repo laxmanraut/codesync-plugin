@@ -47,7 +47,7 @@ PROJECT="${CODESYNC_PROJECT:-}"
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
 # Read identity from config
-IDENTITY=$(python3 -c '
+IDENTITY=$($PY_BIN -c '
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 print(cfg.get("identity", ""))
@@ -55,7 +55,7 @@ print(cfg.get("identity", ""))
 
 [ -n "$IDENTITY" ] || err "No identity set on this machine. Run /install-codesync to register one (auto-captured from your git config user.name)."
 
-PROJECT_PATH=$(python3 -c '
+PROJECT_PATH=$($PY_BIN -c '
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 proj = cfg.get("projects", {}).get(sys.argv[2])
@@ -64,7 +64,7 @@ print(proj["path"] if proj else "")
 
 [ -n "$PROJECT_PATH" ] || err "Project '$PROJECT' not found in config."
 
-python3 - "$SCRIPT_DIR/lib" "$PROJECT_PATH" "$SLUG" "$IDENTITY" "$NO_STATUS_CHANGE" "$RELEASE_MODE" <<'PY'
+$PY_BIN - "$SCRIPT_DIR/lib" "$PROJECT_PATH" "$SLUG" "$IDENTITY" "$NO_STATUS_CHANGE" "$RELEASE_MODE" <<'PY'
 import os, re, sys
 
 lib_dir, project_path, slug, identity, no_status_change, release_mode = sys.argv[1:7]

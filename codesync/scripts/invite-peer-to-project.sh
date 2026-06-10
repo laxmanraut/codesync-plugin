@@ -10,6 +10,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/platform.sh"
+
 CFG_FILE="$HOME/.config/codesync/config.json"
 API="http://127.0.0.1:8384"
 
@@ -47,9 +50,9 @@ done
 # 2. Load config
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-API_KEY=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["syncthing_api_key"])' "$CFG_FILE")
-DEVICE_ID=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["device_id"])' "$CFG_FILE")
-FOLDER_ID=$(python3 -c '
+API_KEY=$($PY_BIN -c 'import json,sys; print(json.load(open(sys.argv[1]))["syncthing_api_key"])' "$CFG_FILE")
+DEVICE_ID=$($PY_BIN -c 'import json,sys; print(json.load(open(sys.argv[1]))["device_id"])' "$CFG_FILE")
+FOLDER_ID=$($PY_BIN -c '
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 projects = cfg.get("projects", {})
@@ -75,25 +78,7 @@ api "$API/rest/system/status" >/dev/null \
 SHORT_NAME="codesync-peer-${PEER_ID:0:7}"
 log "Ensuring peer '$SHORT_NAME' is in Syncthing's known devices..."
 EXISTING_DEVICE=$(api "$API/rest/config/devices/$PEER_ID" 2>/dev/null || echo "")
-DEVICE_PAYLOAD=$(python3 - "$PEER_ID" "$SHORT_NAME" "$AS_INTRODUCER" "$EXISTING_DEVICE" <<'PY'
-import json, sys
-peer, name, asintro, existing = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-introducer = asintro == "yes"
-if not introducer and existing:
-    try:
-        introducer = bool(json.loads(existing).get("introducer", False))
-    except Exception:
-        introducer = False
-print(json.dumps({
-    "deviceID":          peer,
-    "name":              name,
-    "addresses":         ["dynamic"],
-    "compression":       "metadata",
-    "introducer":        introducer,
-    "autoAcceptFolders": False,
-}))
-PY
-)
+DEVICE_PAYLOAD=$($PY_BIN "$SCRIPT_DIR/lib/device_payload.py" "$PEER_ID" "$SHORT_NAME" "$AS_INTRODUCER" "$EXISTING_DEVICE")
 api -X PUT -H "Content-Type: application/json" --data-binary "$DEVICE_PAYLOAD" \
   "$API/rest/config/devices/$PEER_ID" >/dev/null \
   || err "Failed to register peer device with Syncthing"
@@ -103,7 +88,7 @@ log "Adding peer to project '$PROJECT_NAME' (folder $FOLDER_ID)..."
 FOLDER_JSON=$(api "$API/rest/config/folders/$FOLDER_ID") \
   || err "Folder '$FOLDER_ID' not found in Syncthing. Project may be misregistered."
 
-UPDATED=$(python3 - "$FOLDER_JSON" "$PEER_ID" <<'PY'
+UPDATED=$($PY_BIN - "$FOLDER_JSON" "$PEER_ID" <<'PY'
 import json, sys
 folder = json.loads(sys.argv[1])
 peer = sys.argv[2]

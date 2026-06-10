@@ -17,6 +17,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/platform.sh"
+
 CFG_FILE="$HOME/.config/codesync/config.json"
 
 log() { printf '  %s\n' "$*"; }
@@ -40,7 +43,7 @@ done
 
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
-EXISTS=$(python3 -c '
+EXISTS=$($PY_BIN -c '
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 print("yes" if sys.argv[2] in cfg.get("projects", {}) else "no")
@@ -60,7 +63,7 @@ fi
 
 mkdir -p "$MARKER_DIR"
 
-python3 - "$MARKER_FILE" "$PROJECT" "$ROLE" <<'PY'
+$PY_BIN - "$MARKER_FILE" "$PROJECT" "$ROLE" <<'PY'
 import json, sys
 path, project, role = sys.argv[1:4]
 data = {"project": project}
@@ -75,10 +78,21 @@ log "Wrote $MARKER_FILE"
 
 # Optionally symlink the synced project's CLAUDE.md into cwd so Claude Code's
 # native CLAUDE.md mechanism picks it up automatically.
+#
+# Windows (OV6): `ln -s` under Git Bash silently degrades to a COPY unless
+# Developer Mode is enabled — and a copy goes permanently stale as
+# collaborators update the synced file, with no error ever shown. Stale
+# instructions actively mislead, so on Windows we skip the link entirely:
+# the SessionStart hook already injects the synced CLAUDE.md content when
+# the cwd is outside the project folder, which covers this exact case.
 LINKED_CLAUDE_MD=""
+if [ "$LINK_CLAUDE_MD" = "yes" ] && [ "${CODESYNC_OS:-}" = "windows" ]; then
+  log "Skipped CLAUDE.md symlink on Windows: symlinks silently degrade to stale copies under Git Bash. The SessionStart hook injects the synced CLAUDE.md automatically instead — no action needed."
+  LINK_CLAUDE_MD="no"
+fi
 if [ "$LINK_CLAUDE_MD" = "yes" ]; then
   # Look up the project path from config
-  PROJ_PATH=$(python3 -c '
+  PROJ_PATH=$($PY_BIN -c '
 import json, sys
 cfg = json.load(open(sys.argv[1]))
 p = cfg.get("projects", {}).get(sys.argv[2])
