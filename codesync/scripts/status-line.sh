@@ -64,11 +64,15 @@ if [ -f "$PROJ_PTR" ] && [ -f "$SCAN_MARKER" ]; then
 fi
 
 # ── 2+3. Full scan (Python): unread count + first-seen notification ─────────
-OUTPUT=$($PY_BIN - "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" "$SEEN_LOG" <<'PY' 2>/dev/null
+BASELINE_FILE="$STATE_DIR/baseline-$CODESYNC_PROJECT.json"
+
+OUTPUT=$($PY_BIN - "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" "$SEEN_LOG" "$BASELINE_FILE" <<'PY' 2>/dev/null
 import json, os, sys, time
 
 try:
-    cfg_path, project, role, seen_log = sys.argv[1:5]
+    # All paths arrive as argv (MSYS converts argv for native python.exe;
+    # Python-side expanduser would resolve USERPROFILE, not bash's $HOME).
+    cfg_path, project, role, seen_log, baseline_path = sys.argv[1:6]
     cfg = json.load(open(cfg_path))
     proj = cfg.get("projects", {}).get(project)
     if not proj:
@@ -83,7 +87,6 @@ try:
 
     print(f"PROJPATH\t{proj_path}")
 
-    baseline_path = os.path.expanduser(f"~/.config/codesync/baseline-{project}.json")
     baseline = {}
     if os.path.exists(baseline_path):
         try:

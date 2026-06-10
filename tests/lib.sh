@@ -30,6 +30,12 @@ t_setup() {
   export CODESYNC_ROLE="qa"
   PROJ="$T_TMP/proj"
   mkdir -p "$HOME/.config/codesync" "$PROJ/_inbox/qa" "$PROJ/_inbox/backend" "$PROJ/_archive/qa" "$PROJ/_roles" "$PROJ/_docs"
+  # Match create-project.sh: on Windows the config stores the path in native
+  # mixed form (C:/...) because file contents never get MSYS path conversion.
+  # Mixed form also works for every bash file test, so PROJ itself converts.
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) PROJ="$(cygpath -m "$PROJ")" ;;
+  esac
   cat > "$HOME/.config/codesync/config.json" <<EOF
 {
   "identity": "tester",

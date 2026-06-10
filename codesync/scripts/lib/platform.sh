@@ -133,9 +133,14 @@ codesync_notify() {
 }
 
 # ── Portable mtime ───────────────────────────────────────────────────────────
-codesync_mtime() {
-  # BSD stat (macOS) vs GNU stat (Git Bash / Linux)
-  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
-}
+# BSD stat (macOS) uses -f FORMAT; GNU stat (Git Bash / Linux) uses -c FORMAT.
+# CANNOT chain them with || : on GNU, `stat -f %m FILE` is "filesystem status"
+# mode — it SUCCEEDS and prints the mount point, so the fallback never runs
+# and callers get "/" instead of an epoch. Probe the dialect once instead.
+if stat -c %Y / >/dev/null 2>&1; then
+  codesync_mtime() { stat -c %Y "$1" 2>/dev/null || echo 0; }
+else
+  codesync_mtime() { stat -f %m "$1" 2>/dev/null || echo 0; }
+fi
 
 fi # CODESYNC_PLATFORM_LOADED

@@ -55,6 +55,13 @@ if [ "$EXISTING" = "yes" ]; then
 fi
 
 PROJECT_PATH="$HOME/codesync/$PROJECT_NAME"
+# On Windows, store the path in NATIVE mixed form (C:/Users/...) — this value
+# lands inside config.json, and file CONTENTS never get MSYS path conversion,
+# so a /c/Users/... form would be unreadable by the native Python that all
+# hooks use. Mixed form works in both Git Bash and Python.
+if [ "$CODESYNC_OS" = "windows" ] && command -v cygpath >/dev/null 2>&1; then
+  PROJECT_PATH="$(cygpath -m "$PROJECT_PATH")"
+fi
 FOLDER_ID="codesync-$PROJECT_NAME"
 
 # 5. Sanity-check Syncthing is up

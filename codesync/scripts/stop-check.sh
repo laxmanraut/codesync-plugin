@@ -21,12 +21,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 [ -n "${PY_BIN:-}" ] || exit 0
 
 SEEN_LOG="$HOME/.config/codesync/seen-${CODESYNC_PROJECT:-none}.log"
+BASELINE_FILE="$HOME/.config/codesync/baseline-${CODESYNC_PROJECT:-none}.json"
 
-$PY_BIN - "$SCRIPT_DIR/lib" "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" "$SEEN_LOG" <<'PY' 2>/dev/null
+$PY_BIN - "$SCRIPT_DIR/lib" "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" "$SEEN_LOG" "$BASELINE_FILE" <<'PY' 2>/dev/null
 import json, os, sys, time
 
 try:
-    lib_dir, cfg_path, active_project, active_role, seen_log = sys.argv[1:6]
+    # All paths arrive as argv (MSYS converts argv for native python.exe;
+    # Python-side expanduser would resolve USERPROFILE, not bash's $HOME).
+    lib_dir, cfg_path, active_project, active_role, seen_log, baseline_path = sys.argv[1:7]
     sys.path.insert(0, lib_dir)
     from frontmatter import read_frontmatter_from_file  # noqa: E402
 
@@ -57,10 +60,6 @@ try:
         filter_roles = [active_role]
     else:
         filter_roles = []  # no filter
-
-    baseline_path = os.path.expanduser(
-        f"~/.config/codesync/baseline-{active_project}.json"
-    )
 
     EXCLUDE_DIRS  = {".stfolder", ".stversions"}
     EXCLUDE_FILES = {"README.md"}
