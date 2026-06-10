@@ -46,6 +46,12 @@ __codesync_py_works() {
   $1 -c 'import sys' >/dev/null 2>&1
 }
 
+# UTF-8 mode for every Python the plugin spawns (PEP 540). Without this,
+# native Windows Python defaults stdout AND open() to cp1252 — printing the
+# ▴/→ glyphs or reading a thread body with umlauts raises UnicodeEncodeError
+# and kills the script. One env var fixes the whole class everywhere.
+export PYTHONUTF8=1
+
 if [ -z "${PY_BIN:-}" ]; then
   if __codesync_py_works "python3"; then
     PY_BIN="python3"

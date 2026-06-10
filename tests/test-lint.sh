@@ -34,7 +34,7 @@ scripts = sys.argv[1]
 bad = []
 for fn in sorted(glob.glob(os.path.join(scripts, "*.sh"))):
     src = first = None
-    for i, line in enumerate(open(fn), 1):
+    for i, line in enumerate(open(fn, encoding="utf-8", errors="replace"), 1):
         code = line.split("#", 1)[0]
         if src is None and re.search(r'lib/(load-env|platform)\.sh"', code):
             src = i

@@ -12,6 +12,16 @@ OUT=$(bash "$SCRIPTS/set-thread-status.sh" --slug "$SLUG" --status done 2>&1)
 t_eq "set-thread-status exits 0" "0" "$?"
 t_contains "status updated" "status: done" "$(cat "$PROJ/_inbox/qa/$SLUG.md")"
 
+# Non-ASCII regression (PYTHONUTF8): German umlauts in the title must survive
+# the read-modify-write cycle — native Windows Python defaults to cp1252 for
+# stdout AND open(), which crashed set-thread-status (it prints a → glyph).
+OUT=$(bash "$SCRIPTS/write-thread.sh" --to qa --title "Übergabe prüfen: Ärger mit März-Daten" 2>&1)
+t_eq "umlaut thread write exits 0" "0" "$?"
+USLUG=$(printf '%s\n' "$OUT" | sed -n 's/^SLUG=//p')
+OUT=$(bash "$SCRIPTS/set-thread-status.sh" --slug "$USLUG" --status wip 2>&1)
+t_eq "umlaut set-thread-status exits 0" "0" "$?"
+t_contains "umlauts intact after rewrite" "Übergabe prüfen" "$(cat "$PROJ/_inbox/qa/$USLUG.md")"
+
 printf '# Doc A\ncontent\n' > "$PROJ/_docs/doc-a.md"
 OUT=$(bash "$SCRIPTS/list-docs.sh" 2>&1)
 t_eq "list-docs exits 0" "0" "$?"
