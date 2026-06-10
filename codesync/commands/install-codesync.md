@@ -313,7 +313,7 @@ The script prints `REGISTERED_ROLES=<comma-separated list>` on success. If it er
 
 Ask the user, defaulting to **yes**:
 
-> Want a small `codesync ▴ N new` indicator in Claude Code's bottom bar so you can see at a glance when new threads arrive? Silent when zero, fires a macOS notification when something new comes in. Non-destructive (composes with any existing status line you have). [yes] / no
+> Want a small `codesync ▴ N new` indicator in Claude Code's bottom bar so you can see at a glance when new threads arrive? Silent when zero, fires a native notification (macOS banner / Windows toast) when something new comes in. Non-destructive (composes with any existing status line you have). [yes] / no
 
 On **yes** (or bare enter), run:
 
@@ -321,7 +321,7 @@ On **yes** (or bare enter), run:
 "${CLAUDE_PLUGIN_ROOT}/scripts/statusline-setup.sh"
 ```
 
-Tell the user *"Installed. The indicator will appear in your bottom bar within a few seconds; macOS will ask for notification permission the first time something arrives."*
+Tell the user *"Installed. The indicator will appear in your bottom bar within a few seconds. On macOS you'll be asked for notification permission the first time something arrives; on Windows, toasts work out of the box (check Focus Assist if they don't show)."*
 
 On **no**, skip. Mention they can run `/codesync-statusline-setup` later if they change their mind.
 
@@ -392,7 +392,7 @@ them without needing to switch terminals.
 
 Next steps:
   1. Send the Device ID above to your collaborator.
-  2. On their Mac they install this plugin and run /install-codesync.
+  2. On their machine (Mac or Windows) they install this plugin and run /install-codesync.
      They'll pick their own role(s) and get their own Device ID back.
      IMPORTANT: the project name must match exactly on their side
      (yours: '<ACTIVE_PROJECT>') for sync to align.

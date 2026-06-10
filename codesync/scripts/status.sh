@@ -13,11 +13,13 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 
+# Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
+# (also loads the platform layer that resolves PY_BIN — must precede any use)
+. "$SCRIPT_DIR/lib/load-env.sh"
+[ -n "${PY_BIN:-}" ] || err "No usable Python found (tried python3, python, py -3)."
+
 API_KEY=$($PY_BIN -c 'import json,sys; print(json.load(open(sys.argv[1])).get("syncthing_api_key", ""))' "$CFG_FILE")
 [ -n "$API_KEY" ] || err "syncthing_api_key missing in $CFG_FILE. Re-run /install-codesync."
-
-# Populate CODESYNC_PROJECT/ROLE from env or .codesync/project.json walk-up
-. "$SCRIPT_DIR/lib/load-env.sh"
 
 ACTIVE_PROJECT="${CODESYNC_PROJECT:-}"
 

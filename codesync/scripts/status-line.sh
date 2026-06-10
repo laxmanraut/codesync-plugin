@@ -55,7 +55,9 @@ if [ -f "$PROJ_PTR" ] && [ -f "$SCAN_MARKER" ]; then
         [ "$M" -gt "$NEWEST" ] 2>/dev/null && NEWEST=$M
       done
     done
-    if [ "$NEWEST" -le "$MARKER_M" ] 2>/dev/null; then
+    # Strictly-less-than: with 1-second mtime granularity a file written in
+    # the same second as the marker would be skipped by -le. Equal → rescan.
+    if [ "$NEWEST" -lt "$MARKER_M" ] 2>/dev/null; then
       # Nothing changed since the last full scan — cached output, zero Python.
       [ -f "$CACHE_FILE" ] && cat "$CACHE_FILE"
       exit 0
@@ -65,6 +67,13 @@ fi
 
 # ── 2+3. Full scan (Python): unread count + first-seen notification ─────────
 BASELINE_FILE="$STATE_DIR/baseline-$CODESYNC_PROJECT.json"
+
+# Stamp the marker time BEFORE the scan (promoted to the real marker only on
+# success). Touching after the scan would open a race: a file arriving while
+# Python runs gets an mtime older than the marker and the fast path would
+# wrongly treat it as already scanned.
+mkdir -p "$STATE_DIR" 2>/dev/null
+touch "$SCAN_MARKER.tmp" 2>/dev/null
 
 OUTPUT=$($PY_BIN - "$CFG_FILE" "${CODESYNC_PROJECT:-}" "${CODESYNC_ROLE:-}" "$SEEN_LOG" "$BASELINE_FILE" <<'PY' 2>/dev/null
 import json, os, sys, time
@@ -173,10 +182,23 @@ PROJ_PATH=$(printf '%s\n' "$OUTPUT" | awk -F'\t' '$1=="PROJPATH"{print $2; exit}
 NOTIFY_N=$(printf '%s\n' "$OUTPUT" | awk -F'\t' '$1=="NOTIFY"{print $2; exit}')
 SEGMENT=$(printf '%s\n' "$OUTPUT" | awk -F'\t' '$1=="SEGMENT"{print $2; exit}')
 
-mkdir -p "$STATE_DIR" 2>/dev/null
-[ -n "$PROJ_PATH" ] && printf '%s\n' "$PROJ_PATH" > "$PROJ_PTR" 2>/dev/null
-printf '%s\n' "${SEGMENT:-}" > "$CACHE_FILE" 2>/dev/null
-touch "$SCAN_MARKER" 2>/dev/null
+# Only refresh cache + scan marker if the scan actually succeeded (Python
+# always emits PROJPATH on success). On a crashed/empty scan, leave the old
+# state so the next invocation retries a full scan instead of trusting it.
+if [ -n "$PROJ_PATH" ]; then
+  printf '%s\n' "$PROJ_PATH" > "$PROJ_PTR" 2>/dev/null
+  # Empty segment → truncate the cache to zero bytes, so the fast path's
+  # `cat` prints nothing (a cached bare newline would emit a blank line).
+  if [ -n "${SEGMENT:-}" ]; then
+    printf '%s\n' "$SEGMENT" > "$CACHE_FILE" 2>/dev/null
+  else
+    : > "$CACHE_FILE" 2>/dev/null
+  fi
+  # Promote the PRE-scan timestamp (see above) to the real marker.
+  mv -f "$SCAN_MARKER.tmp" "$SCAN_MARKER" 2>/dev/null
+else
+  rm -f "$SCAN_MARKER.tmp" 2>/dev/null
+fi
 
 # Fire ONE notification for this batch of never-seen threads
 if [ -n "$NOTIFY_N" ] && [ "$NOTIFY_N" -gt 0 ] 2>/dev/null; then

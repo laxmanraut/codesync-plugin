@@ -29,11 +29,12 @@ set -euo pipefail
 CFG_FILE="$HOME/.config/codesync/config.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# launchd jobs get a minimal PATH; extend BEFORE loading the platform layer —
+# PY_BIN resolution probes PATH, so the order matters under launchd.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.claude/local:$PATH"
+
 # Platform layer: CODESYNC_OS, PY_BIN, codesync_* helpers
 . "$SCRIPT_DIR/lib/platform.sh"
-
-# launchd jobs get a minimal PATH; extend so claude + $PY_BIN resolve.
-export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.claude/local:$PATH"
 
 PROJECT="${CODESYNC_PROJECT:-}"
 [ -n "$PROJECT" ] || { echo "autopilot: CODESYNC_PROJECT not set" >&2; exit 1; }

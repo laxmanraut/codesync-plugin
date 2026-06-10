@@ -9,6 +9,11 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Platform layer: CODESYNC_OS, PY_BIN, codesync_* helpers — must load before
+# the first $PY_BIN / $CODESYNC_OS use below (set -u would abort otherwise)
+. "$SCRIPT_DIR/lib/platform.sh"
+
 CFG_FILE="$HOME/.config/codesync/config.json"
 API="http://127.0.0.1:8384"
 
@@ -85,10 +90,6 @@ README
 fi
 
 # Scaffold _docs/ + CLAUDE.md via the shared seeder (idempotent).
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# Platform layer: CODESYNC_OS, PY_BIN, codesync_* helpers
-. "$SCRIPT_DIR/lib/platform.sh"
 bash "$SCRIPT_DIR/seed-project-docs.sh" --project "$PROJECT_NAME" --path "$PROJECT_PATH" >/dev/null
 
 # 7. Refuse if a Syncthing folder with this ID already exists
