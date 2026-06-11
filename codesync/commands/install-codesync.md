@@ -18,9 +18,9 @@ It is interactive — work through the steps in order; do not skip ahead.
 
 ## Step 1 — Run the install script
 
-The install script is idempotent (safe to re-run). Execute:
+The install script is idempotent (safe to re-run). Run it with the Bash tool, setting **timeout to 600000 (10 minutes)** — on Windows it may download Python and Syncthing via winget, which routinely exceeds the default 2-minute limit (a default-timeout kill mid-download was the #1 real-world install failure):
 
-```!
+```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/install-syncthing.sh"
 ```
 
