@@ -33,26 +33,48 @@ if [ "$CODESYNC_OS" = "windows" ]; then
   # Python auto-install (D13): PY_BIN is empty when no working Python exists
   # (the Microsoft Store stub is filtered out by the platform layer).
   if [ -z "$PY_BIN" ]; then
-    log "No working Python found — installing via winget (user scope, ~30s)..."
-    winget install -e --id Python.Python.3.12 --scope user \
-      --accept-package-agreements --accept-source-agreements >/dev/null \
-      || err "winget could not install Python. Install it manually from https://python.org and re-run."
-    # winget updates PATH for NEW shells only; locate the fresh install directly.
-    for cand in "$(cygpath -u "$LOCALAPPDATA")/Programs/Python/Python312/python.exe" \
+    log "No working Python found — installing via winget (~30s)..."
+    WINGET_LOG="$(mktemp "${TMPDIR:-/tmp}/codesync-winget.XXXXXX")"
+    # --source winget avoids msstore-source agreement stalls. Some winget
+    # versions reject --scope user for this package — try with, retry without.
+    if ! winget install -e --id Python.Python.3.12 --source winget --scope user \
+          --accept-package-agreements --accept-source-agreements >"$WINGET_LOG" 2>&1; then
+      log "winget with --scope user failed; retrying without scope..."
+      if ! winget install -e --id Python.Python.3.12 --source winget \
+            --accept-package-agreements --accept-source-agreements >>"$WINGET_LOG" 2>&1; then
+        printf '  ── winget output (last 20 lines) ──\n' >&2
+        tail -20 "$WINGET_LOG" >&2 || true
+        err "winget could not install Python (full log: $WINGET_LOG). Install it manually from https://python.org (check 'Add python.exe to PATH'), then re-run /install-codesync."
+      fi
+    fi
+    rm -f "$WINGET_LOG"
+    # winget updates PATH for NEW shells only; locate the fresh install
+    # directly. The py launcher (py.exe) lands in C:\Windows — already on
+    # PATH — so probe it too; version-glob covers whichever 3.x landed.
+    for cand in "$(cygpath -u "$LOCALAPPDATA")"/Programs/Python/Python3*/python.exe \
                 "$(command -v python3 2>/dev/null || true)" \
                 "$(command -v python 2>/dev/null || true)"; do
       [ -n "$cand" ] && [ -x "$cand" ] && "$cand" -c 'import sys' >/dev/null 2>&1 && PY_BIN="$cand" && break
     done
+    if [ -z "$PY_BIN" ] && py -3 -c 'import sys' >/dev/null 2>&1; then
+      PY_BIN="py -3"
+    fi
     [ -n "$PY_BIN" ] || err "Python installed but not yet on PATH. Close this terminal, open a new one, and re-run /install-codesync."
+    export PY_BIN
     log "Python ready: $PY_BIN"
   fi
 
   # Install Syncthing if missing
   if ! command -v syncthing >/dev/null 2>&1; then
     log "Installing syncthing via winget..."
-    winget install -e --id Syncthing.Syncthing \
-      --accept-package-agreements --accept-source-agreements >/dev/null \
-      || err "winget could not install Syncthing. See https://syncthing.net/downloads/ for a manual install, then re-run."
+    WINGET_LOG="$(mktemp "${TMPDIR:-/tmp}/codesync-winget.XXXXXX")"
+    if ! winget install -e --id Syncthing.Syncthing --source winget \
+          --accept-package-agreements --accept-source-agreements >"$WINGET_LOG" 2>&1; then
+      printf '  ── winget output (last 20 lines) ──\n' >&2
+      tail -20 "$WINGET_LOG" >&2 || true
+      err "winget could not install Syncthing (full log: $WINGET_LOG). See https://syncthing.net/downloads/ for a manual install, then re-run."
+    fi
+    rm -f "$WINGET_LOG"
     # Same PATH caveat: find the binary for THIS session.
     if ! command -v syncthing >/dev/null 2>&1; then
       SYNCTHING_EXE=$(find "$(cygpath -u "$LOCALAPPDATA")/Microsoft/WinGet" \
