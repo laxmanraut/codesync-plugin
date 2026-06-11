@@ -63,6 +63,22 @@ if [ -z "${PY_BIN:-}" ]; then
     PY_BIN=""
   fi
 fi
+
+# Windows PATH-staleness fallback: a winget/python.org user install updates
+# PATH in the REGISTRY, but already-running processes (Claude Code and every
+# bash it spawns) keep their old PATH until restarted. Probe the standard
+# per-user install location directly so the plugin works in the same session
+# Python was installed in — and in hooks, which inherit the same stale PATH.
+if [ -z "$PY_BIN" ] && [ "$CODESYNC_OS" = "windows" ] \
+   && [ -n "${LOCALAPPDATA:-}" ] && command -v cygpath >/dev/null 2>&1; then
+  for __codesync_cand in "$(cygpath -u "$LOCALAPPDATA")"/Programs/Python/Python3*/python.exe; do
+    if [ -x "$__codesync_cand" ] && "$__codesync_cand" -c 'import sys' >/dev/null 2>&1; then
+      PY_BIN="$__codesync_cand"
+      break
+    fi
+  done
+  unset __codesync_cand
+fi
 export PY_BIN
 
 # Portable Python invocation — PY_BIN may be two words ("py -3"), so callers

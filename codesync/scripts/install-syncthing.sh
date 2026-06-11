@@ -37,20 +37,20 @@ if [ "$CODESYNC_OS" = "windows" ]; then
     WINGET_LOG="$(mktemp "${TMPDIR:-/tmp}/codesync-winget.XXXXXX")"
     # --source winget avoids msstore-source agreement stalls. Some winget
     # versions reject --scope user for this package — try with, retry without.
+    # NOTE: winget also exits NON-ZERO for "already installed, no upgrade
+    # available", so a failed exit code here is NOT conclusive — what decides
+    # is whether a working Python exists after the attempts (probed below).
+    WINGET_OK=yes
     if ! winget install -e --id Python.Python.3.12 --source winget --scope user \
           --accept-package-agreements --accept-source-agreements >"$WINGET_LOG" 2>&1; then
       log "winget with --scope user failed; retrying without scope..."
-      if ! winget install -e --id Python.Python.3.12 --source winget \
-            --accept-package-agreements --accept-source-agreements >>"$WINGET_LOG" 2>&1; then
-        printf '  ── winget output (last 20 lines) ──\n' >&2
-        tail -20 "$WINGET_LOG" >&2 || true
-        err "winget could not install Python (full log: $WINGET_LOG). Install it manually from https://python.org (check 'Add python.exe to PATH'), then re-run /install-codesync."
-      fi
+      winget install -e --id Python.Python.3.12 --source winget \
+        --accept-package-agreements --accept-source-agreements >>"$WINGET_LOG" 2>&1 \
+        || WINGET_OK=no
     fi
-    rm -f "$WINGET_LOG"
-    # winget updates PATH for NEW shells only; locate the fresh install
-    # directly. The py launcher (py.exe) lands in C:\Windows — already on
-    # PATH — so probe it too; version-glob covers whichever 3.x landed.
+    # Locate a working Python regardless of winget's exit code. winget
+    # updates PATH for NEW shells only, so probe the per-user install dir
+    # directly; the py launcher (C:\Windows) is on PATH immediately.
     for cand in "$(cygpath -u "$LOCALAPPDATA")"/Programs/Python/Python3*/python.exe \
                 "$(command -v python3 2>/dev/null || true)" \
                 "$(command -v python 2>/dev/null || true)"; do
@@ -59,7 +59,16 @@ if [ "$CODESYNC_OS" = "windows" ]; then
     if [ -z "$PY_BIN" ] && py -3 -c 'import sys' >/dev/null 2>&1; then
       PY_BIN="py -3"
     fi
-    [ -n "$PY_BIN" ] || err "Python installed but not yet on PATH. Close this terminal, open a new one, and re-run /install-codesync."
+    if [ -z "$PY_BIN" ]; then
+      printf '  ── winget output (last 20 lines) ──\n' >&2
+      tail -20 "$WINGET_LOG" >&2 || true
+      if [ "$WINGET_OK" = "yes" ]; then
+        err "Python was installed but no working interpreter was found afterwards (log: $WINGET_LOG). Close this terminal AND Claude Code, reopen, and re-run /install-codesync."
+      else
+        err "winget could not install Python (full log: $WINGET_LOG). Install it manually from https://python.org (check 'Add python.exe to PATH'), then re-run /install-codesync."
+      fi
+    fi
+    rm -f "$WINGET_LOG"
     export PY_BIN
     log "Python ready: $PY_BIN"
   fi
@@ -68,24 +77,33 @@ if [ "$CODESYNC_OS" = "windows" ]; then
   if ! command -v syncthing >/dev/null 2>&1; then
     log "Installing syncthing via winget..."
     WINGET_LOG="$(mktemp "${TMPDIR:-/tmp}/codesync-winget.XXXXXX")"
-    if ! winget install -e --id Syncthing.Syncthing --source winget \
-          --accept-package-agreements --accept-source-agreements >"$WINGET_LOG" 2>&1; then
-      printf '  ── winget output (last 20 lines) ──\n' >&2
-      tail -20 "$WINGET_LOG" >&2 || true
-      err "winget could not install Syncthing (full log: $WINGET_LOG). See https://syncthing.net/downloads/ for a manual install, then re-run."
-    fi
-    rm -f "$WINGET_LOG"
-    # Same PATH caveat: find the binary for THIS session.
+    # As with Python above: winget exits non-zero for "already installed,
+    # no upgrade" too, so the exit code is advisory — what decides is
+    # whether the binary can be located afterwards.
+    WINGET_OK=yes
+    winget install -e --id Syncthing.Syncthing --source winget \
+      --accept-package-agreements --accept-source-agreements >"$WINGET_LOG" 2>&1 \
+      || WINGET_OK=no
+    # PATH staleness: locate the binary directly for THIS session.
     if ! command -v syncthing >/dev/null 2>&1; then
       SYNCTHING_EXE=$(find "$(cygpath -u "$LOCALAPPDATA")/Microsoft/WinGet" \
         "$(cygpath -u "$PROGRAMFILES")" \
         -maxdepth 4 -name syncthing.exe 2>/dev/null | head -1)
-      [ -n "$SYNCTHING_EXE" ] || err "Syncthing installed but binary not found. Open a new terminal and re-run /install-codesync."
+      if [ -z "$SYNCTHING_EXE" ]; then
+        printf '  ── winget output (last 20 lines) ──\n' >&2
+        tail -20 "$WINGET_LOG" >&2 || true
+        if [ "$WINGET_OK" = "yes" ]; then
+          err "Syncthing installed but binary not found (log: $WINGET_LOG). Close this terminal AND Claude Code, reopen, and re-run /install-codesync."
+        else
+          err "winget could not install Syncthing (full log: $WINGET_LOG). See https://syncthing.net/downloads/ for a manual install, then re-run."
+        fi
+      fi
     fi
+    rm -f "$WINGET_LOG"
   else
     log "syncthing already installed"
   fi
-  SYNCTHING_EXE="${SYNCTHING_EXE:-$(command -v syncthing)}"
+  SYNCTHING_EXE="${SYNCTHING_EXE:-$(command -v syncthing || true)}"
 
   # Launch detached IN THIS SESSION if not already running (OV5). The Startup
   # shortcut below only takes effect at next login — without this, the rest
