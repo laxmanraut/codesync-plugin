@@ -85,10 +85,13 @@ if [ "$CODESYNC_OS" = "windows" ]; then
       --accept-package-agreements --accept-source-agreements >"$WINGET_LOG" 2>&1 \
       || WINGET_OK=no
     # PATH staleness: locate the binary directly for THIS session.
+    # `|| true` is load-bearing: under pipefail, find exits non-zero when it
+    # hits ANY permission-denied directory — even after locating the binary —
+    # which would kill the script right here (live-install finding #4).
     if ! command -v syncthing >/dev/null 2>&1; then
       SYNCTHING_EXE=$(find "$(cygpath -u "$LOCALAPPDATA")/Microsoft/WinGet" \
         "$(cygpath -u "$PROGRAMFILES")" \
-        -maxdepth 4 -name syncthing.exe 2>/dev/null | head -1)
+        -maxdepth 4 -name syncthing.exe 2>/dev/null | head -1 || true)
       if [ -z "$SYNCTHING_EXE" ]; then
         printf '  ── winget output (last 20 lines) ──\n' >&2
         tail -20 "$WINGET_LOG" >&2 || true
@@ -111,7 +114,13 @@ if [ "$CODESYNC_OS" = "windows" ]; then
   if ! curl -s -o /dev/null "$API" 2>/dev/null && ! tasklist 2>/dev/null | grep -qi 'syncthing.exe'; then
     log "Starting syncthing (background, no browser)..."
     SYNCTHING_WIN=$(cygpath -w "$SYNCTHING_EXE")
-    cmd //c start "codesync-syncthing" //b "$SYNCTHING_WIN" -no-browser -no-restart >/dev/null 2>&1 || true
+    # PowerShell Start-Process, NOT `cmd start`: bash strips the quotes
+    # around start's "title" argument, so cmd receives it unquoted and
+    # treats the title as the program to run — a Windows error dialog
+    # "cannot find 'codesync-syncthing'" (live-install finding #5).
+    powershell.exe -NoProfile -NonInteractive -Command \
+      "Start-Process -FilePath '$SYNCTHING_WIN' -ArgumentList '-no-browser','-no-restart' -WindowStyle Hidden" \
+      >/dev/null 2>&1 || true
     log "NOTE: if Windows Defender Firewall pops up, click 'Allow access'"
     log "      (private networks is enough) — Syncthing needs it to reach peers."
   else
