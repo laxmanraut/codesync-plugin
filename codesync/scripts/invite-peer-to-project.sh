@@ -47,6 +47,12 @@ done
 [ -n "$PEER_ID" ]      || err "Usage: invite-peer-to-project.sh --peer <device-id> --project <name> [--as-introducer]"
 [ -n "$PROJECT_NAME" ] || err "Usage: invite-peer-to-project.sh --peer <device-id> --project <name> [--as-introducer]"
 
+# Same ID validation as pair-peer.sh — this script is independently invocable
+# and interpolates PEER_ID into REST URLs.
+PEER_ID=$(printf '%s' "$PEER_ID" | tr '[:lower:]' '[:upper:]' | tr -d ' ')
+printf '%s' "$PEER_ID" | grep -Eq '^[A-Z2-7]{7}(-[A-Z2-7]{7}){7}$' \
+  || err "'$PEER_ID' is not a valid Syncthing device ID (expected 8 groups of 7 characters). Copy it exactly as shown by /codesync-status on the other machine."
+
 # 2. Load config
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 

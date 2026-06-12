@@ -46,6 +46,16 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$PEER_ID" ] || err "Usage: pair-peer.sh --peer <peer-device-id> [--as-introducer]"
 
+# Normalize + validate the ID format (8 dash-separated groups of 7 chars,
+# base32 alphabet). Catches typos with a clear message instead of a cryptic
+# REST error, and guarantees the value is safe to interpolate into API URLs.
+PEER_ID=$(printf '%s' "$PEER_ID" | tr '[:lower:]' '[:upper:]' | tr -d ' ')
+case "$PEER_ID" in
+  *[!A-Z2-7-]*) err "'$PEER_ID' is not a valid Syncthing device ID (unexpected characters). Copy it exactly as shown by /codesync-status on the other machine." ;;
+esac
+printf '%s' "$PEER_ID" | grep -Eq '^[A-Z2-7]{7}(-[A-Z2-7]{7}){7}$' \
+  || err "'$PEER_ID' is not a valid Syncthing device ID (expected 8 groups of 7 characters, e.g. ABCDEFG-...). Copy it exactly as shown by /codesync-status on the other machine."
+
 # 2. Load machine-level config
 [ -f "$CFG_FILE" ] || err "Config not found at $CFG_FILE. Run /install-codesync first."
 

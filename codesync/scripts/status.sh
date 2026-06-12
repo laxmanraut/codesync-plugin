@@ -39,13 +39,22 @@ try:
 except Exception:
     pass
 try:
+    import re
+    # Name is self-declared by the untrusted requester and lands in session
+    # context — sanitize; drop entries whose ID isn't Syncthing-format.
+    ID_RE = re.compile(r'^[A-Z2-7]{7}(-[A-Z2-7]{7}){7}$')
+    def clean(s, n=40):
+        return re.sub(r'[^A-Za-z0-9 ._:-]', '?', str(s))[:n]
     pending = json.loads(sys.argv[1])
     if not isinstance(pending, dict) or not pending:
         sys.exit(0)
-    print(f"  Incoming pairing requests ({len(pending)}):")
-    for dev_id, info in pending.items():
-        name = (info or {}).get("name", "") or "unnamed device"
-        seen = (info or {}).get("time", "")
+    entries = [(d, i) for d, i in pending.items() if ID_RE.match(str(d))]
+    if not entries:
+        sys.exit(0)
+    print(f"  Incoming pairing requests ({len(entries)}):")
+    for dev_id, info in entries:
+        name = clean((info or {}).get("name", "") or "unnamed device")
+        seen = clean((info or {}).get("time", ""), 25)
         print(f"    \"{name}\"  {dev_id}  (first seen: {seen})")
         print(f"      Accept: /codesync-pair --peer {dev_id}")
     print("    Only accept devices you recognise — pairing shares the project folder.")

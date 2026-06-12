@@ -111,7 +111,9 @@ if [ "$CODESYNC_OS" = "windows" ]; then
   # Launch detached IN THIS SESSION if not already running (OV5). The Startup
   # shortcut below only takes effect at next login — without this, the rest
   # of the install (API wait) would hang forever on first run.
-  if ! curl -s -o /dev/null "$API" 2>/dev/null && ! tasklist 2>/dev/null | grep -qi 'syncthing.exe'; then
+  # grep WITHOUT -q: -q exits at first match, tasklist takes SIGPIPE, and
+  # pipefail then reports failure even though the process WAS found.
+  if ! curl -s -o /dev/null "$API" 2>/dev/null && ! tasklist 2>/dev/null | grep -i 'syncthing.exe' >/dev/null; then
     log "Starting syncthing (background, no browser)..."
     SYNCTHING_WIN=$(cygpath -w "$SYNCTHING_EXE")
     # PowerShell Start-Process, NOT `cmd start`: bash strips the quotes
@@ -152,7 +154,7 @@ else
     log "syncthing already installed"
   fi
 
-  if brew services list | awk '$1=="syncthing"{print $2}' | grep -qx started; then
+  if brew services list 2>/dev/null | awk '$1=="syncthing"{print $2}' | grep -x started >/dev/null; then
     log "syncthing service already running"
   else
     log "Starting syncthing service..."

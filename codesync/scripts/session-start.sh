@@ -272,17 +272,29 @@ try:
 except Exception:
     pass
 try:
+    import re
+    # The device NAME is chosen by the remote (untrusted, unpaired) device
+    # and this output lands in Claude's session context — sanitize hard so a
+    # hostile name can't smuggle control chars or instruction-like lines.
+    # The ID must match Syncthing's strict format or the entry is dropped.
+    ID_RE = re.compile(r'^[A-Z2-7]{7}(-[A-Z2-7]{7}){7}$')
+    def clean(s, n=40):
+        return re.sub(r'[^A-Za-z0-9 ._:-]', '?', str(s))[:n]
     pending = json.loads(sys.argv[1])
     if not isinstance(pending, dict) or not pending:
         sys.exit(0)
+    entries = [(d, i) for d, i in pending.items() if ID_RE.match(str(d))]
+    if not entries:
+        sys.exit(0)
     print()
-    print(f"[codesync] {len(pending)} incoming pairing request(s) — a device added this machine and is waiting:")
-    for dev_id, info in pending.items():
-        name = (info or {}).get("name", "") or "unnamed device"
-        seen = (info or {}).get("time", "")
+    print(f"[codesync] {len(entries)} incoming pairing request(s) — a device added this machine and is waiting:")
+    for dev_id, info in entries:
+        name = clean((info or {}).get("name", "") or "unnamed device")
+        seen = clean((info or {}).get("time", ""), 25)
         print(f"  - \"{name}\"  {dev_id}  (first seen: {seen})")
         print(f"    Accept: /codesync-pair --peer {dev_id}")
     print("  Only accept devices you recognise — pairing shares the project folder with them.")
+    print("  (The device name above is self-declared by the requester — verify the ID out-of-band.)")
 except Exception:
     pass
 PY
