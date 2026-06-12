@@ -251,3 +251,40 @@ try:
 except Exception:
     pass  # never let the hook break a session start
 PY
+
+# ── Incoming pairing requests (machine-level — shown even with no project) ──
+# When a peer runs /codesync-pair with OUR device ID, their Syncthing starts
+# knocking and ours records a pending device request. Surface it here with
+# the exact accept command, so the second half of pairing is one paste away
+# (the asymmetric-pairing flow: new machine adds us, we just say yes).
+API_KEY=$($PY_BIN -c 'import json,sys; print(json.load(open(sys.argv[1])).get("syncthing_api_key",""))' "$CFG_FILE" 2>/dev/null) || API_KEY=""
+if [ -n "$API_KEY" ]; then
+  PENDING=$(curl -s --max-time 1 -H "X-API-Key: $API_KEY" \
+    "http://127.0.0.1:8384/rest/cluster/pending/devices" 2>/dev/null) || PENDING=""
+  if [ -n "$PENDING" ] && [ "$PENDING" != "{}" ]; then
+    # JSON goes via argv, NOT a pipe: `python -` takes its PROGRAM from
+    # stdin, so the heredoc already owns that stream — a pipe would be
+    # silently discarded and the banner would never print.
+    $PY_BIN - "$PENDING" <<'PY' 2>/dev/null
+import json, sys
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+try:
+    pending = json.loads(sys.argv[1])
+    if not isinstance(pending, dict) or not pending:
+        sys.exit(0)
+    print()
+    print(f"[codesync] {len(pending)} incoming pairing request(s) — a device added this machine and is waiting:")
+    for dev_id, info in pending.items():
+        name = (info or {}).get("name", "") or "unnamed device"
+        seen = (info or {}).get("time", "")
+        print(f"  - \"{name}\"  {dev_id}  (first seen: {seen})")
+        print(f"    Accept: /codesync-pair --peer {dev_id}")
+    print("  Only accept devices you recognise — pairing shares the project folder with them.")
+except Exception:
+    pass
+PY
+  fi
+fi

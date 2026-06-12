@@ -396,9 +396,12 @@ Next steps:
      They'll pick their own role(s) and get their own Device ID back.
      IMPORTANT: the project name must match exactly on their side
      (yours: '<ACTIVE_PROJECT>') for sync to align.
-  3. Pair the machines — each side runs once, with CODESYNC_PROJECT set:
+  3. Pair the machines. One side runs (with CODESYNC_PROJECT set):
         /codesync-pair --peer <other-machine's-device-id>
-     Sync starts automatically once both sides have done it.
+     The OTHER side then sees an "incoming pairing request" banner at its
+     next Claude session start (also in /codesync-status), with the exact
+     accept command ready to paste — no need to send the second Device ID
+     back manually. Sync starts once both sides have accepted.
   4. Verify with /codesync-status.
 
 To add more roles in this project later: /codesync-role-new

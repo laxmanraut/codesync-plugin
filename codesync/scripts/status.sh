@@ -23,6 +23,39 @@ API_KEY=$($PY_BIN -c 'import json,sys; print(json.load(open(sys.argv[1])).get("s
 
 ACTIVE_PROJECT="${CODESYNC_PROJECT:-}"
 
+# Incoming pairing requests (machine-level — relevant in both modes).
+# A peer that ran /codesync-pair with our device ID is waiting for us to
+# accept; Syncthing parks the request in /rest/cluster/pending/devices.
+show_pending_pairings() {
+  PENDING=$(curl -s --max-time 2 -H "X-API-Key: $API_KEY" \
+    "$API/rest/cluster/pending/devices" 2>/dev/null) || PENDING=""
+  [ -n "$PENDING" ] && [ "$PENDING" != "{}" ] || return 0
+  # JSON via argv, not a pipe — `python -` reads its program from stdin,
+  # which the heredoc owns; piped data would be silently lost.
+  $PY_BIN - "$PENDING" <<'PY' 2>/dev/null
+import json, sys
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+try:
+    pending = json.loads(sys.argv[1])
+    if not isinstance(pending, dict) or not pending:
+        sys.exit(0)
+    print(f"  Incoming pairing requests ({len(pending)}):")
+    for dev_id, info in pending.items():
+        name = (info or {}).get("name", "") or "unnamed device"
+        seen = (info or {}).get("time", "")
+        print(f"    \"{name}\"  {dev_id}  (first seen: {seen})")
+        print(f"      Accept: /codesync-pair --peer {dev_id}")
+    print("    Only accept devices you recognise — pairing shares the project folder.")
+    print()
+except Exception:
+    pass
+PY
+  return 0
+}
+
 # If no project active in this terminal, fall into "summary" mode — list all
 # registered projects, their roles, their paths. Then exit (skip the
 # Syncthing health detail which is per-project).
@@ -59,6 +92,7 @@ print("To activate one in this terminal:  export CODESYNC_PROJECT=<name> CODESYN
 print("(or use the `cs` wrapper if you've added it to your shell)")
 print()
 PY
+  show_pending_pairings
   exit 0
 fi
 
@@ -193,3 +227,5 @@ else:
     print("    (_roles/ directory not found inside the project path)")
 print()
 PY
+
+show_pending_pairings
