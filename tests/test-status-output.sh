@@ -41,7 +41,9 @@ chmod +x "$STUB/curl"
 normalize() {
   # ages drift with wall-clock; the sandbox PROJ path differs per run and per
   # platform (mixed-form C:/... on Windows) — substitute the literal known path.
-  sed -E 's/[0-9]+[smhd] ago/<age>/g' | sed "s|$PROJ|<proj>|g"
+  # also canonicalise the post-<proj> separator: os.path.join yields a
+  # backslash on Windows, forward slash on macOS — normalise to "/".
+  sed -E 's/[0-9]+[smhd] ago/<age>/g' | sed "s|$PROJ|<proj>|g" | sed 's#<proj>\\#<proj>/#g'
 }
 
 # summary mode = no CODESYNC_PROJECT in the environment
