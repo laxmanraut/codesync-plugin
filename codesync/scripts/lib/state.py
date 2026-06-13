@@ -268,19 +268,26 @@ def gather_threads(cfg, project_name, roles=None, now=None):
 
 
 # ────────────────────────────── activity ───────────────────────────────────
-def gather_activity(cfg, project_name, now=None):
+def gather_activity(cfg, project_name, config_dir=None, now=None):
     """Time-to-notice metric from the shared first-seen log (OV7).
 
     Each seen-log line is 'rel<TAB>ISO-timestamp' = when a thread was first
     surfaced. We pair each against the thread file's mtime (arrival time) to
     get a per-thread notice latency, then summarise. Empty until handoffs flow.
+
+    `config_dir` is where seen-*.log lives (the config.json directory). It is
+    passed explicitly because Python's expanduser('~') resolves USERPROFILE on
+    Windows, NOT bash's $HOME — the v0.22.x path-staleness lesson. Falls back
+    to expanduser only when not supplied (real single-user runs).
     """
     proj = (cfg.get("projects") or {}).get(project_name)
     if not proj:
         return {"samples": 0, "median_seconds": None, "recent": []}
     proj_path = proj.get("path", "")
-    seen_log = os.path.expanduser(
-        f"~/.config/codesync/seen-{project_name}.log")
+    if config_dir:
+        seen_log = os.path.join(config_dir, f"seen-{project_name}.log")
+    else:
+        seen_log = os.path.expanduser(f"~/.config/codesync/seen-{project_name}.log")
     if not os.path.exists(seen_log):
         return {"samples": 0, "median_seconds": None, "recent": []}
 
@@ -343,12 +350,13 @@ if __name__ == "__main__":
     cfg_path = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser(
         "~/.config/codesync/config.json")
     project = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("CODESYNC_PROJECT", "")
+    config_dir = os.path.dirname(os.path.abspath(cfg_path))
     cfg = load_config(cfg_path)
     blob = {"overview": gather_overview(cfg)}
     if project:
         blob["peers"] = gather_peers(cfg, project)
         blob["folder"] = gather_folder_status(cfg, project)
         blob["threads"] = gather_threads(cfg, project)
-        blob["activity"] = gather_activity(cfg, project)
+        blob["activity"] = gather_activity(cfg, project, config_dir)
     blob["pending"] = gather_pending(cfg)
     print(json.dumps(blob, indent=2, ensure_ascii=False))

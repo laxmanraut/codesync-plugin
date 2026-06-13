@@ -45,11 +45,14 @@ except Exception:
     pass
 
 INDEX_PATH = os.path.join(SCRIPT_DIR, "dashboard", "index.html")
-DASHBOARD_STATE = os.path.expanduser("~/.config/codesync/dashboard.json")
 PAIR_PEER = os.path.join(SCRIPT_DIR, "pair-peer.sh")
 
 # Shared mutable launch state (set in main, read by the handler + watchdog).
-_ctx = {"token": "", "config": "", "last_activity": time.time()}
+# config_dir is the config.json directory — the seen-logs and dashboard.json
+# live there. Derived from --config, NOT expanduser('~'), because Python's
+# expanduser resolves USERPROFILE on Windows, not bash's $HOME (v0.22.x lesson).
+_ctx = {"token": "", "config": "", "config_dir": "", "state_file": "",
+        "last_activity": time.time()}
 _lock = threading.Lock()
 
 
@@ -111,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
                         "threads": state.gather_threads(cfg, project)})
         elif u.path == "/api/activity":
             self._json({"project": project,
-                        "activity": state.gather_activity(cfg, project)})
+                        "activity": state.gather_activity(cfg, project, _ctx["config_dir"])})
         else:
             self._send(404, "404 not found\n", "text/plain; charset=utf-8")
 
@@ -178,13 +181,14 @@ def _default_project(cfg):
 
 
 def _write_state(port, token):
+    sf = _ctx["state_file"]
     try:
-        os.makedirs(os.path.dirname(DASHBOARD_STATE), exist_ok=True)
-        fd = os.open(DASHBOARD_STATE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.makedirs(os.path.dirname(sf), exist_ok=True)
+        fd = os.open(sf, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as f:
             json.dump({"pid": os.getpid(), "port": port, "token": token,
                        "started": int(time.time())}, f)
-        os.chmod(DASHBOARD_STATE, 0o600)
+        os.chmod(sf, 0o600)
     except Exception:
         pass
 
@@ -197,7 +201,7 @@ def _watchdog(httpd, idle_timeout):
             idle = time.time() - _ctx["last_activity"]
         if idle >= idle_timeout:
             try:
-                os.remove(DASHBOARD_STATE)
+                os.remove(_ctx["state_file"])
             except OSError:
                 pass
             httpd.shutdown()
@@ -211,6 +215,8 @@ def main():
     args = ap.parse_args()
 
     _ctx["config"] = args.config
+    _ctx["config_dir"] = os.path.dirname(os.path.abspath(args.config))
+    _ctx["state_file"] = os.path.join(_ctx["config_dir"], "dashboard.json")
     _ctx["token"] = secrets.token_urlsafe(24)
 
     # Random free port on loopback only.
@@ -233,7 +239,7 @@ def main():
         pass
     finally:
         try:
-            os.remove(DASHBOARD_STATE)
+            os.remove(_ctx["state_file"])
         except OSError:
             pass
 
