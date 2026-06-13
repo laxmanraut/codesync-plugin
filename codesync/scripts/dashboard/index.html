@@ -92,18 +92,25 @@
   .warnline{font-size:11.5px;color:var(--muted);margin-top:10px}
   .stat{display:flex;gap:22px;flex-wrap:wrap}.stat .n{font-size:26px;font-weight:900;letter-spacing:-.02em}.stat .l{font-size:12px;color:var(--muted)}
   .err{color:var(--bad);font-size:12.5px;margin-top:6px}
+  /* simple-by-default: the "waiting for you" panel + progressive disclosure */
+  .wrow{display:flex;align-items:center;gap:12px;padding:13px 2px;border-top:1px solid rgba(255,255,255,.06)}
+  .wrow:first-of-type{border-top:0}
+  .wrow .main{flex:1;min-width:0}
+  .wrow .title{font-weight:700;font-size:15.5px}
+  .disclose{display:block;width:100%;text-align:left;margin:16px 0 0;cursor:pointer;
+    background:var(--card);border:1px solid var(--border);border-radius:11px;
+    padding:11px 15px;font:inherit;font-weight:600;font-size:13.5px;color:var(--muted);
+    transition:border-color .2s,color .2s}
+  .disclose:hover{border-color:var(--accent);color:var(--text)}
+  #details{margin-top:14px}
   footer{margin-top:30px;font-size:11.5px;color:var(--muted);text-align:center}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><span class="glyph">⇄</span> codesync <span style="font-weight:500;color:var(--muted);font-size:14px">dashboard</span></div>
-    <div class="meta">
-      <div class="st"><span id="st-dot" class="dot"></span><span id="st-text">connecting…</span></div>
-      <div id="m-identity"></div>
-      <div class="id" id="m-device"></div>
-    </div>
+    <div class="brand"><span class="glyph">⇄</span> codesync</div>
+    <div class="meta"><div id="m-identity"></div></div>
   </header>
 
   <div class="crumbs">
@@ -124,38 +131,48 @@
     <div id="projects"><div class="empty">…</div></div>
   </section>
 
-  <!-- DETAIL VIEW: one project -->
+  <!-- DETAIL VIEW: one project. Simple by default — one "waiting for you"
+       panel — with everything operational behind a System-details toggle. -->
   <section id="view-detail" style="display:none">
-    <div class="grid">
-      <section class="card span">
-        <h2>Agents on this project <span class="count" id="c-agents"></span></h2>
-        <div id="agents"><div class="empty">…</div></div>
-      </section>
-      <section class="card span">
-        <h2>Needs attention <span class="count" id="c-attn"></span></h2>
-        <div id="attention"><div class="empty">…</div></div>
-      </section>
-      <section class="card span">
-        <h2>Activity <span class="count" id="c-feed"></span></h2>
-        <div id="feed"><div class="empty">…</div></div>
-        <div class="warnline">Recent activity, reconstructed from file history — not a complete audit log. Peer connect/disconnect isn't tracked here (see Agents for live status).</div>
-      </section>
-      <section class="card">
-        <h2>Autopilot</h2>
-        <div id="autopilot"><div class="empty">…</div></div>
-      </section>
-      <section class="card">
-        <h2>Metrics</h2>
-        <div id="metrics"><div class="empty">…</div></div>
-      </section>
-      <section class="card span">
-        <h2>Folder sync</h2>
-        <div id="folder"><div class="empty">…</div></div>
-      </section>
-      <section class="card span">
-        <h2>Threads <span class="count" id="c-threads"></span></h2>
-        <div id="threads"><div class="empty">…</div></div>
-      </section>
+    <section class="card span" id="card-waiting">
+      <h2>Waiting for you <span class="count" id="c-waiting"></span></h2>
+      <div id="waiting"><div class="empty">…</div></div>
+    </section>
+
+    <button type="button" id="details-toggle" class="disclose">▸ System details — peers, sync, autopilot, metrics, activity</button>
+    <div id="details" hidden>
+      <div class="grid">
+        <section class="card span">
+          <h2>Agents on this project <span class="count" id="c-agents"></span>
+            <span class="st" style="margin-left:auto"><span id="st-dot" class="dot"></span><span id="st-text"></span></span></h2>
+          <div id="agents"><div class="empty">…</div></div>
+        </section>
+        <section class="card span">
+          <h2>Needs attention <span class="count" id="c-attn"></span></h2>
+          <div id="attention"><div class="empty">…</div></div>
+        </section>
+        <section class="card span">
+          <h2>Activity <span class="count" id="c-feed"></span></h2>
+          <div id="feed"><div class="empty">…</div></div>
+          <div class="warnline">Recent activity, reconstructed from file history — not a complete audit log. Peer connect/disconnect isn't tracked here (see Agents for live status).</div>
+        </section>
+        <section class="card">
+          <h2>Autopilot</h2>
+          <div id="autopilot"><div class="empty">…</div></div>
+        </section>
+        <section class="card">
+          <h2>Metrics</h2>
+          <div id="metrics"><div class="empty">…</div></div>
+        </section>
+        <section class="card span">
+          <h2>Folder sync</h2>
+          <div id="folder"><div class="empty">…</div></div>
+        </section>
+        <section class="card span">
+          <h2>Threads <span class="count" id="c-threads"></span></h2>
+          <div id="threads"><div class="empty">…</div></div>
+        </section>
+      </div>
     </div>
   </section>
 
@@ -202,19 +219,29 @@ function showDetail(name){ VIEW="detail"; CURRENT=name;
   document.getElementById("view-detail").style.display="";
   document.getElementById("crumb-tail").style.display="";
   document.getElementById("crumb-name").textContent=name;
-  // reset detail panels to loading so stale data isn't shown across projects
-  ["agents","attention","feed","autopilot","metrics","folder","threads"].forEach(id=>{
+  // collapse System details + reset every panel so no stale data shows across projects
+  setDetails(false);
+  ["waiting","agents","attention","feed","autopilot","metrics","folder","threads"].forEach(id=>{
     const b=document.getElementById(id); clear(b); b.appendChild(el("div",{class:"empty",text:"…"}));
   });
   refresh();
 }
 document.getElementById("crumb-root").addEventListener("click",showList);
 
+// progressive disclosure: operator detail stays collapsed until asked for
+let DETAILS=false;
+function setDetails(open){
+  DETAILS=open;
+  document.getElementById("details").hidden=!open;
+  document.getElementById("details-toggle").textContent=
+    (open?"▾":"▸")+" System details — peers, sync, autopilot, metrics, activity";
+}
+document.getElementById("details-toggle").addEventListener("click",()=>{ setDetails(!DETAILS); if(DETAILS) refresh(); });
+
 // ── renderers ───────────────────────────────────────────────────────────────
 function renderHeader(o){
-  OVERVIEW=o;
-  document.getElementById("m-identity").textContent=o.identity?("identity: "+o.identity):"";
-  document.getElementById("m-device").textContent=o.device_id||"";
+  OVERVIEW=o;   // keeps device_id/roles for the System-details agents panel
+  document.getElementById("m-identity").textContent=o.identity?("signed in as "+o.identity):"";
 }
 function renderProjects(o){
   const box=document.getElementById("projects"); clear(box);
@@ -238,8 +265,33 @@ function renderProjects(o){
 }
 function renderStatus(ok){
   const dot=document.getElementById("st-dot"), txt=document.getElementById("st-text");
+  if(!dot||!txt) return;  // lives in System details; absent when collapsed
   if(ok){dot.className="dot ok";txt.textContent="Syncthing online";}
   else{dot.className="dot bad";txt.textContent="Syncthing offline";}
+}
+function plainStatus(s){
+  return {todo:"to do",wip:"in progress",blocked:"blocked",note:"note",done:"done"}[s] || s || "note";
+}
+// The one thing a teammate needs: what's addressed to me here that's still open.
+function renderWaiting(d){
+  const box=document.getElementById("waiting"); clear(box);
+  const open=(d.threads||[]).filter(t=>t.status!=="done");
+  document.getElementById("c-waiting").textContent=open.length||"";
+  if(!open.length){
+    box.appendChild(el("div",{class:"empty",text:"You're all caught up — nothing waiting for you in this project."}));
+    return;
+  }
+  open.forEach(t=>{
+    const who=t.from_identity||t.from||"someone";
+    const st=t.status||"note";
+    box.appendChild(el("div",{class:"wrow"},[
+      el("div",{class:"main"},[
+        el("div",{class:"title",text:t.title}),
+        el("div",{class:"sub",text:"from "+who+" · "+t.age+(t.attach_count?(" · "+t.attach_count+" attached"):"")}),
+      ]),
+      el("span",{class:"badge b-"+(["todo","wip","blocked","note","done"].includes(st)?st:"note"),text:plainStatus(st)}),
+    ]));
+  });
 }
 function projRoles(name){ const p=(OVERVIEW.projects||[]).find(x=>x.name===name); return p?p.roles:[]; }
 
@@ -411,17 +463,17 @@ function refresh(){
   api("/api/pending").then(renderPending).catch(()=>{});
   if(VIEW==="detail" && CURRENT){
     const q="?project="+encodeURIComponent(CURRENT);
-    api("/api/peers"+q).then(renderAgents).catch(showDown);
-    api("/api/threads"+q).then(renderThreads).catch(()=>{});
-    api("/api/activity"+q).then(renderActivityFull).catch(()=>{});
-  } else {
-    // list view: still reflect Syncthing reachability in the header dot
-    api("/api/peers").then(d=>renderStatus(d.syncthing_ok)).catch(()=>{});
+    // the default view needs only threads (→ "waiting for you")
+    api("/api/threads"+q).then(d=>{ renderWaiting(d); if(DETAILS) renderThreads(d); }).catch(()=>{});
+    // the heavy operational panels load only when System details is open
+    if(DETAILS){
+      api("/api/peers"+q).then(renderAgents).catch(()=>{});
+      api("/api/activity"+q).then(renderActivityFull).catch(()=>{});
+    }
   }
   document.getElementById("updated").textContent="updated "+new Date().toLocaleTimeString();
 }
-function showDown(){ const dot=document.getElementById("st-dot"),txt=document.getElementById("st-text");
-  dot.className="dot bad"; txt.textContent="dashboard server unreachable"; }
+function showDown(){ /* server unreachable — keep last view; dot lives in details */ }
 
 refresh();
 setInterval(refresh,4000);
