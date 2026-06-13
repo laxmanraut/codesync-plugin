@@ -28,6 +28,7 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 # 1. Args
 PEER_ID=""
 AS_INTRODUCER="no"
+DEVICE_ONLY="no"
 while [ $# -gt 0 ]; do
   case "$1" in
     --peer)
@@ -39,12 +40,19 @@ while [ $# -gt 0 ]; do
       AS_INTRODUCER="yes"
       shift
       ;;
+    --device-only)
+      # Trust the device but skip the active-project folder invite. Used by the
+      # dashboard's accept-pairing action, which has no terminal project context
+      # and intentionally keeps folder sharing in the in-terminal /codesync-pair.
+      DEVICE_ONLY="yes"
+      shift
+      ;;
     *)
       shift
       ;;
   esac
 done
-[ -n "$PEER_ID" ] || err "Usage: pair-peer.sh --peer <peer-device-id> [--as-introducer]"
+[ -n "$PEER_ID" ] || err "Usage: pair-peer.sh --peer <peer-device-id> [--as-introducer] [--device-only]"
 
 # Normalize + validate the ID format (8 dash-separated groups of 7 chars,
 # base32 alphabet). Catches typos with a clear message instead of a cryptic
@@ -84,9 +92,12 @@ api -X PUT -H "Content-Type: application/json" --data-binary "$DEVICE_PAYLOAD" \
   || err "Failed to add peer device to Syncthing"
 
 # 5. If CODESYNC_PROJECT is set, also invite peer to that project's folder
+#    (skipped entirely under --device-only — device trust without folder share)
 PROJECT="${CODESYNC_PROJECT:-}"
 INVITED_TO=""
-if [ -n "$PROJECT" ]; then
+if [ "$DEVICE_ONLY" = "yes" ]; then
+  log "Device trusted (--device-only): skipped project-folder invite."
+elif [ -n "$PROJECT" ]; then
   PROJECT_FOUND=$($PY_BIN -c '
 import json, sys
 cfg = json.load(open(sys.argv[1]))

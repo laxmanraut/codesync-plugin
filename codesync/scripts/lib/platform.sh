@@ -165,4 +165,32 @@ else
   codesync_mtime() { stat -f %m "$1" 2>/dev/null || echo 0; }
 fi
 
+# ── Open a URL in the default browser ────────────────────────────────────────
+# codesync_open_url URL — fire-and-forget, never blocks, never errors.
+# macOS: open(1). Windows: PowerShell Start-Process (NOT `cmd start`, which
+# mis-parses an unquoted first arg as the program — the v0.22.4 dialog bug;
+# Start-Process takes the URL as a single -FilePath value with no such trap).
+# Test hook: when CODESYNC_TEST_OPEN_LOG is set, append the URL there instead
+# of launching, so the suite can assert what would have opened.
+codesync_open_url() {
+  __cou_url="$1"
+  if [ -n "${CODESYNC_TEST_OPEN_LOG:-}" ]; then
+    printf '%s\n' "$__cou_url" >> "$CODESYNC_TEST_OPEN_LOG" 2>/dev/null || true
+    return 0
+  fi
+  case "$CODESYNC_OS" in
+    macos)
+      open "$__cou_url" >/dev/null 2>&1 &
+      ;;
+    windows)
+      powershell.exe -NoProfile -NonInteractive -Command \
+        "Start-Process '$__cou_url'" >/dev/null 2>&1 &
+      ;;
+    *)
+      command -v xdg-open >/dev/null 2>&1 && xdg-open "$__cou_url" >/dev/null 2>&1 &
+      ;;
+  esac
+  return 0
+}
+
 fi # CODESYNC_PLATFORM_LOADED
