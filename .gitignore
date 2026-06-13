@@ -1,3 +1,6 @@
 .DS_Store
 *.swp
 *.swo
+
+# gstack browse-daemon scratch state (never commit)
+.gstack/

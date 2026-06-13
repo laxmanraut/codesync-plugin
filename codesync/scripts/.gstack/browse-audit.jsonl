@@ -1,4 +1,0 @@
-{"ts":"2026-06-13T06:07:32.257Z","cmd":"viewport","args":"1100x1000","origin":"about:blank","durationMs":9,"status":"ok","hasCookies":false,"mode":"launched"}
-{"ts":"2026-06-13T06:07:32.447Z","cmd":"goto","args":"http://127.0.0.1:50234/?t=C_1WzSugCgq263Cwq2gjOOgQ0WXYOyWj","origin":"http://127.0.0.1:50234/?t=C_1WzSugCgq263Cwq2gjOOgQ0WXYOyWj","durationMs":123,"status":"ok","hasCookies":false,"mode":"launched"}
-{"ts":"2026-06-13T06:07:34.526Z","cmd":"console","args":"--errors","origin":"http://127.0.0.1:50234/?t=C_1WzSugCgq263Cwq2gjOOgQ0WXYOyWj","durationMs":2,"status":"ok","hasCookies":false,"mode":"launched"}
-{"ts":"2026-06-13T06:07:34.835Z","cmd":"screenshot","args":"/tmp/cs-dash-render.png","origin":"http://127.0.0.1:50234/?t=C_1WzSugCgq263Cwq2gjOOgQ0WXYOyWj","durationMs":248,"status":"ok","hasCookies":false,"mode":"launched"}
