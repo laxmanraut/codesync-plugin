@@ -6,12 +6,12 @@
 
 ![Anatomy of a thread (markdown file with structured metadata) and the nine built-in feature cards — predefined roles, hybrid roles, claim model, attachments, project docs, introducer pattern, multi-project, status-line indicator, async-first](docs/images/anatomy-features.png)
 
-**A shared workspace for AI agents on different machines.** When your Claude Code instance has something for a colleague's role — a task to hand off, a question to ask, a design to share — it writes a file in their inbox. Their Claude finds it on the next turn. No cloud account, no server, no human-to-human notification ping needed for routine handoffs.
+**A shared workspace for AI agents on different machines — macOS and Windows.** When your Claude Code instance has something for a colleague's role — a task to hand off, a question to ask, a design to share — it writes a file in their inbox. Their Claude finds it on the next turn. No cloud account, no server, no human-to-human notification ping needed for routine handoffs.
 
-Under the hood: a folder mirrored between your Macs by [Syncthing](https://syncthing.net) (free, peer-to-peer, runs quietly in the background). Inside the folder, work is sorted by **role-addressed inboxes** so each thread goes to the right person. The primitives you'd find in a project-management tool — tasks, status, assignees, attachments, project docs — are all here, in plain markdown, used by the agents themselves.
+Under the hood: a folder mirrored between your machines (Mac or Windows) by [Syncthing](https://syncthing.net) (free, peer-to-peer, runs quietly in the background). Inside the folder, work is sorted by **role-addressed inboxes** so each thread goes to the right person. The primitives you'd find in a project-management tool — tasks, status, assignees, attachments, project docs — are all here, in plain markdown, used by the agents themselves.
 
 ```
-    Your Mac                              Colleague's Mac
+    Your machine                          Colleague's machine
   ┌────────────┐                        ┌────────────┐
   │ Claude     │                        │ Claude     │
   │ Code       │                        │ Code       │
@@ -30,9 +30,9 @@ Under the hood: a folder mirrored between your Macs by [Syncthing](https://synct
     (role: backend)                       (role: frontend)
 ```
 
-**Reading the diagram:** the two boxes at the bottom are the same project folder, mirrored on both Macs by Syncthing — no server sits between them. When your Claude writes a file into `_inbox/frontend/`, Syncthing copies it to your colleague's matching folder within seconds (on the same LAN) or a minute or two (over the internet). Their Claude picks it up on its next turn. The reply flows back the same way, into `_inbox/backend/`. The role names (`backend`, `frontend`) are just folder names — they decide *who the message is for*, not which machine it lives on.
+**Reading the diagram:** the two boxes at the bottom are the same project folder, mirrored on both machines by Syncthing — no server sits between them. When your Claude writes a file into `_inbox/frontend/`, Syncthing copies it to your colleague's matching folder within seconds (on the same LAN) or a minute or two (over the internet). Their Claude picks it up on its next turn. The reply flows back the same way, into `_inbox/backend/`. The role names (`backend`, `frontend`) are just folder names — they decide *who the message is for*, not which machine it lives on.
 
-**Nothing manual, always in sync.** When your Claude has something for your colleague — a new task, a question, a design note, a "done" reply — it writes the file directly into the relevant role's inbox. No copy-paste, no export, no "send" button, no message-broker step. The folder sync runs continuously in the background after install (Syncthing is a small always-on service), so both Macs stay in sync even when Claude Code itself isn't open — if your colleague is asleep and you ship five tasks for them, all five are waiting on their machine when they wake up. The receiving Claude picks up new files automatically too: a session-start summary lists what's waiting in the inbox the moment you launch Claude Code, and a post-turn auto-check surfaces anything new that arrived while you were typing. Neither agent ever has to be told "go check the folder" — it's already happening every turn.
+**Nothing manual, always in sync.** When your Claude has something for your colleague — a new task, a question, a design note, a "done" reply — it writes the file directly into the relevant role's inbox. No copy-paste, no export, no "send" button, no message-broker step. The folder sync runs continuously in the background after install (Syncthing is a small always-on service), so both machines stay in sync even when Claude Code itself isn't open — if your colleague is asleep and you ship five tasks for them, all five are waiting on their machine when they wake up. The receiving Claude picks up new files automatically too: a session-start summary lists what's waiting in the inbox the moment you launch Claude Code, and a post-turn auto-check surfaces anything new that arrived while you were typing. Neither agent ever has to be told "go check the folder" — it's already happening every turn.
 
 ## What this is — and what it isn't
 
@@ -40,7 +40,7 @@ Honest framing first, so you know whether to keep reading:
 
 **What codesync IS:**
 
-- **A shared workspace for AI agents** working across machines. Claude on Mac A reads what Claude on Mac B wrote.
+- **A shared workspace for AI agents** working across machines. Claude on one machine reads what Claude on another wrote — macOS and Windows alike.
 - **Structured agent handoffs.** Threads carry `from`, `to`, `status`, attachments, replies, owner — the receiving agent knows exactly how to route, prioritize, and respond.
 - **Project-management primitives, used directly by agents.** Tasks, status (`todo`/`wip`/`done`/`blocked`/`note`), assignees (via role + identity + claim), attachments (images, PDFs, mockups), project docs (auto-loaded as context) — all the small-team essentials, in plain markdown files.
 
@@ -60,13 +60,14 @@ Honest framing first, so you know whether to keep reading:
 | Team wiki, rich-text docs | Notion, Confluence, Obsidian |
 | **AI agents coordinating across machines, with structured handoffs and auto-loaded project context** | **codesync** |
 
-codesync occupies a specific niche: **agent-mediated coordination** for small teams (2–7 people) where work is done through Claude Code on individual Macs and the agents themselves participate in the workflow. It's a **complement to your existing stack, not a replacement.** Keep using your PM tool for boards and reports; keep using Slack for chat; add codesync for the layer where your AI agents talk to each other.
+codesync occupies a specific niche: **agent-mediated coordination** for small teams (2–7 people) where work is done through Claude Code on individual machines (macOS or Windows) and the agents themselves participate in the workflow. It's a **complement to your existing stack, not a replacement.** Keep using your PM tool for boards and reports; keep using Slack for chat; add codesync for the layer where your AI agents talk to each other.
 
 ## Requirements
 
-- macOS (the install scripts use `brew services` and read Syncthing's config from `~/Library/Application Support/`)
-- [Homebrew](https://brew.sh)
-- [Claude Code](https://claude.com/claude-code)
+- **macOS** or **Windows 10/11**
+  - macOS: [Homebrew](https://brew.sh) — Syncthing installs via `brew` and runs as a `brew services` job
+  - Windows: `winget` (ships with Windows 10 1709+ / 11 as "App Installer") — the installer fetches Syncthing, and Python too if the machine doesn't have it
+- [Claude Code](https://claude.com/claude-code) (its shell runs the plugin's scripts via Git Bash on Windows — nothing to configure)
 
 ## Install
 
@@ -87,7 +88,7 @@ A walkthrough from zero to your first synced thread. Each step links to the deta
 
 **Day 0 — set up your machine.** Run `/install-codesync`. It installs Syncthing once, captures your identity for thread attribution (auto-suggested from your `git config user.name`), asks you to name a project, and shows a numbered role picker (Backend, Frontend, PM, Designer, etc., plus "Custom"). Multi-select is fine — pick `5,7` to register as PM + Designer. Prints your **Device ID**. → See *[First-time setup](#first-time-setup)*.
 
-**Day 0+ — share the Device ID with your collaborator.** They install the plugin and run `/install-codesync` with **the same project name**. Each side runs `/codesync-pair --peer <other-device-id>` once. Syncthing connects directly; the project folder mirrors between the two Macs within seconds. → See *[Pairing with a collaborator](#pairing-with-a-collaborator)*.
+**Day 0+ — pair with your collaborator.** They install the plugin and run `/install-codesync` with **the same project name**. Then only ONE side needs the other's Device ID: they run `/codesync-pair --peer <your-device-id>`, and at your next Claude session you'll see an **incoming pairing request** banner with the accept command ready to paste. Accept it and Syncthing connects directly; the project folder mirrors between the two machines within seconds. → See *[Pairing with a collaborator](#pairing-with-a-collaborator)*.
 
 **Day 1 — send a thread.** In a terminal with the project + role activated:
 
@@ -121,7 +122,7 @@ You'll be asked who the thread is for and what to say. Reply in plain English (*
 
 This will:
 
-1. Install Syncthing via Homebrew if needed and start it as a background service.
+1. Install Syncthing if needed (Homebrew on macOS; winget on Windows, which also auto-installs Python when missing) and start it in the background.
 2. Save your Syncthing API key and Device ID.
 3. Ask you to pick or create a **project** (e.g. `project-1`, `mobile-app`). Each project becomes its own Syncthing folder at `~/codesync/<project>/`. If projects already exist on this machine, a numbered picker shows them plus a "New project" option.
 4. Show a numbered **role picker** with 12 predefined roles across Engineering, Product & Design, and Project & People — pick one or more (comma-separated). Hybrid is fine: pick `5,7` for "Product Manager + Designer" in one go. Option 13 is "Custom (free-form)" for roles outside the curated list. Each pick comes with a starter `Owns` / `Does not own` template you can edit before saving.
@@ -214,15 +215,23 @@ Walks through naming + creates a new Syncthing folder + scaffold. After it runs,
 
 ## Pairing with a collaborator
 
-After both of you have a project of the same name (e.g. both ran `/install-codesync` with project `project-1`), exchange Device IDs (printed by install or `/codesync-status`).
+After both of you have a project of the same name (e.g. both ran `/install-codesync` with project `project-1`), only **one** Device ID needs to change hands — the joining side needs yours (printed by install or `/codesync-status`).
 
-In a terminal where `CODESYNC_PROJECT=project-1` is set, run:
+The joining side runs, in a terminal where `CODESYNC_PROJECT=project-1` is set:
 
 ```
-/codesync-pair --peer <their-device-id>
+/codesync-pair --peer <your-device-id>
 ```
 
-This pairs the devices AND invites the peer to the active project's folder. Your collaborator runs the same command on their side (with their own `CODESYNC_PROJECT` set). Sync starts automatically once both sides have done it.
+This pairs the devices AND invites the peer to the active project's folder. On **your** side, the request shows up automatically — an **incoming pairing request** banner at your next Claude session start (and in `/codesync-status`), naming the requesting device with the accept command ready to paste:
+
+```
+[codesync] 1 incoming pairing request(s) — a device added this machine and is waiting:
+  - "colleague-win11"  ABCDEFG-...  (first seen: 2026-06-12T09:14:02Z)
+    Accept: /codesync-pair --peer ABCDEFG-...
+```
+
+Run that accept command (with your `CODESYNC_PROJECT` set) and sync starts. The displayed name is self-declared by the requester, so verify the ID matches what your collaborator sent you before accepting — mutual explicit trust is what keeps strangers out of your folder; codesync makes it one paste, but never automatic.
 
 If you want to invite an **already-paired** peer to a **different** project, set `CODESYNC_PROJECT` to that other project and run `/codesync-pair --peer <id>` again — the command is smart about it. The device-pair step is a no-op (idempotent PUT) when the peer is already known, but the project-invite still runs. One command for both fresh pairing and additional-project invites.
 
@@ -474,7 +483,7 @@ Safely adds the codesync segment to `~/.claude/settings.json` statusLine. Backs 
 
 The status line refreshes every few seconds. Sending any message forces an immediate refresh.
 
-**Real-time alert when something new arrives.** Whenever the unread count climbs (e.g., 0 → 1, or 3 → 5 if a batch syncs in), the status-line script also fires a native **macOS notification** with the system "Glass" alert sound — *"2 new threads for backend in project-1"* — so you don't have to be looking at the bottom bar to know something arrived. Only fires on increase (silent on first run, silent when the count is steady or goes down). Uses macOS's built-in `osascript` — no extra install needed; grant notification permission once when prompted.
+**Real-time alert when something new arrives.** When a never-seen-before thread lands, the status-line script fires a native notification — a macOS banner with the "Glass" alert sound, or a Windows toast — *"2 new threads in project-1"* — so you don't have to be looking at the bottom bar to know something arrived. A shared first-seen log deduplicates across sessions: one arrival means one notification total, no matter how many Claude windows are open, and a thread already surfaced by the post-turn check won't toast again. No extra install on either platform; macOS asks for notification permission once.
 
 ## Autopilot — queued threads get picked up even when Claude isn't open
 
@@ -484,7 +493,7 @@ The inbox is already a durable queue: threads wait on disk, delivered by Syncthi
 /codesync-autopilot on
 ```
 
-Installs a per-project `launchd` job that polls every 15 minutes, around the clock. Each cycle:
+Installs a per-project background job (`launchd`; **currently macOS-only** — Windows Task Scheduler support is on the roadmap) that polls every 15 minutes, around the clock. Each cycle:
 
 1. A **zero-token pre-check** (pure bash) looks for never-before-processed threads in your registered roles' inboxes. Nothing new → exit. A quiet inbox costs nothing.
 2. If new threads exist, a **headless Claude session** (`claude -p`) triages them:
@@ -535,7 +544,7 @@ The post-turn auto-check and session-start summary continue to surface changes i
 | `/codesync-thread-archive <slug> [--unarchive]` | Move a thread from `_inbox/<role>/` to `_archive/<role>/`. File preserved, just out of default views. Pass `--unarchive` to reverse. Attachments move along. |
 | `/codesync-thread-attach <slug> <file>...` | Attach one or more files (images, PDFs, HTML mockups, anything) to an existing thread. Files sync alongside the thread; listings show `[+ N attachments]`. |
 | `/codesync-doc-list` | List project-wide docs in `_docs/` — filename + first heading + size. Read-only; ask Claude to read any specific doc afterwards. |
-| `/codesync-autopilot [on\|off\|status]` | Background pickup of queued threads: a launchd job polls every 15 min and a headless Claude auto-replies to doc-answerable questions (tagged `[auto]`). Loop brakes + 4-runs/hour cap built in. |
+| `/codesync-autopilot [on\|off\|status]` | Background pickup of queued threads: a launchd job polls every 15 min and a headless Claude auto-replies to doc-answerable questions (tagged `[auto]`). Loop brakes + 4-runs/hour cap built in. _(macOS-only today; Windows Task Scheduler support planned.)_ |
 | `/codesync-statusline-setup` | Install codesync's status-line segment (shows `codesync ▴ N new` in Claude Code's bottom bar when there are unread items). Backs up settings.json. (Auto-offered during `/install-codesync`.) |
 | `/codesync-statusline-teardown` | Remove codesync's status-line segment; restore prior statusLine. |
 | `/codesync-status` | When `CODESYNC_PROJECT` is set: active project + role, Syncthing health, peers, folder sync state, registered roles. When unset: lists every project on this machine + their registered roles. |
