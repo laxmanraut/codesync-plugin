@@ -182,13 +182,16 @@ def gather_folder_status(cfg, project_name):
 
 
 # ────────────────────────────── pending ────────────────────────────────────
-def gather_pending(cfg):
-    """Incoming pairing requests (devices that added us, waiting for accept).
+def sanitize_pending(pending):
+    """Validate + sanitise a raw Syncthing pending-devices dict → list of
+    {id, name, time}.
 
-    Drops entries whose ID isn't strict Syncthing format and sanitises the
-    self-declared name (v0.23.1 hardening). Returns [] when none / offline.
+    The SINGLE SOURCE for the v0.23.1 hardening (strict ID format + name
+    sanitisation), shared by gather_pending (urllib fetch) AND the status.sh /
+    session-start.sh banners (curl fetch) so this logic can't drift across the
+    three places it used to be copied into (eng-review R1). Fetch stays where
+    each caller had it; only the parsing/sanitising is consolidated here.
     """
-    pending = _syncthing_get(cfg, "/rest/cluster/pending/devices")
     if not isinstance(pending, dict):
         return []
     out = []
@@ -202,6 +205,12 @@ def gather_pending(cfg):
             "time": _sanitize(info.get("time", ""), 25),
         })
     return out
+
+
+def gather_pending(cfg):
+    """Incoming pairing requests (devices that added us, waiting for accept).
+    Returns [] when none / offline. Sanitisation lives in sanitize_pending."""
+    return sanitize_pending(_syncthing_get(cfg, "/rest/cluster/pending/devices"))
 
 
 # ────────────────────────────── threads ────────────────────────────────────

@@ -32,31 +32,24 @@ show_pending_pairings() {
   [ -n "$PENDING" ] && [ "$PENDING" != "{}" ] || return 0
   # JSON via argv, not a pipe — `python -` reads its program from stdin,
   # which the heredoc owns; piped data would be silently lost.
-  $PY_BIN - "$PENDING" <<'PY' 2>/dev/null
+  $PY_BIN - "$PENDING" "$SCRIPT_DIR/lib" <<'PY' 2>/dev/null
 import json, sys
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
 try:
-    import re
-    # Name is self-declared by the untrusted requester and lands in session
-    # context — sanitize; drop entries whose ID isn't Syncthing-format.
-    ID_RE = re.compile(r'^[A-Z2-7]{7}(-[A-Z2-7]{7}){7}$')
-    def clean(s, n=40):
-        return re.sub(r'[^A-Za-z0-9 ._:-]', '?', str(s))[:n]
-    pending = json.loads(sys.argv[1])
-    if not isinstance(pending, dict) or not pending:
-        sys.exit(0)
-    entries = [(d, i) for d, i in pending.items() if ID_RE.match(str(d))]
+    # Validation + sanitisation from state.sanitize_pending (single source,
+    # eng-review R1). Curl fetch stays in bash above; this only formats.
+    sys.path.insert(0, sys.argv[2])
+    import state
+    entries = state.sanitize_pending(json.loads(sys.argv[1]))
     if not entries:
         sys.exit(0)
     print(f"  Incoming pairing requests ({len(entries)}):")
-    for dev_id, info in entries:
-        name = clean((info or {}).get("name", "") or "unnamed device")
-        seen = clean((info or {}).get("time", ""), 25)
-        print(f"    \"{name}\"  {dev_id}  (first seen: {seen})")
-        print(f"      Accept: /codesync-pair --peer {dev_id}")
+    for e in entries:
+        print(f"    \"{e['name']}\"  {e['id']}  (first seen: {e['time']})")
+        print(f"      Accept: /codesync-pair --peer {e['id']}")
     print("    Only accept devices you recognise — pairing shares the project folder.")
     print()
 except Exception:
@@ -69,16 +62,16 @@ PY
 # registered projects, their roles, their paths. Then exit (skip the
 # Syncthing health detail which is per-project).
 if [ -z "$ACTIVE_PROJECT" ]; then
-  $PY_BIN - "$CFG_FILE" <<'PY'
-import json, sys
+  $PY_BIN - "$CFG_FILE" "$SCRIPT_DIR/lib" <<'PY'
+import sys
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # cp1252 default on Windows
 except Exception:
     pass
-cfg = json.load(open(sys.argv[1]))
-projects = cfg.get("projects", {})
-identity = cfg.get("identity", "")
-device_id = cfg.get("device_id", "")
+sys.path.insert(0, sys.argv[2])
+import state  # single source of truth (eng-review R1)
+o = state.gather_overview(state.load_config(sys.argv[1]))
+identity = o["identity"]; device_id = o["device_id"]; projects = o["projects"]
 print()
 print("CodeSync status (no project active in this terminal)")
 print("────────────────────────────────────────────────────")
@@ -89,11 +82,11 @@ if not projects:
     print("  No projects registered yet. Run /install-codesync to create one.")
 else:
     print(f"  Projects on this machine ({len(projects)}):")
-    for name, p in sorted(projects.items()):
-        path = p.get("path", "?")
-        roles = p.get("roles", []) or []
+    for p in projects:  # gather_overview already sorts by name
+        path = p["path"] or "?"
+        roles = p["roles"]
         roles_str = ", ".join(roles) if roles else "(no roles registered on this device)"
-        print(f"    {name}")
+        print(f"    {p['name']}")
         print(f"      path:  {path}")
         print(f"      roles: {roles_str}")
 print()
@@ -123,14 +116,16 @@ if curl -sf -H "X-API-Key: $API_KEY" --max-time 5 "$API/rest/system/status" >/de
   STATUS_OK=yes
 fi
 
-$PY_BIN - "$CFG_FILE" "$API" "$API_KEY" "$STATUS_OK" "$ACTIVE_PROJECT" <<'PY'
-import json, os, sys, urllib.request, urllib.error
+$PY_BIN - "$CFG_FILE" "$API" "$API_KEY" "$STATUS_OK" "$ACTIVE_PROJECT" "$SCRIPT_DIR/lib" <<'PY'
+import json, os, sys
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # cp1252 default on Windows
 except Exception:
     pass
 
-cfg_path, api, api_key, status_ok, project_name = sys.argv[1:6]
+cfg_path, api, api_key, status_ok, project_name, lib_dir = sys.argv[1:7]
+sys.path.insert(0, lib_dir)
+import state  # single source of truth (eng-review R1); peers/folder via gather_*
 
 with open(cfg_path) as f:
     cfg = json.load(f)
@@ -142,11 +137,6 @@ device_id = cfg.get("device_id", "")
 identity = cfg.get("identity", "")
 active_role = os.environ.get("CODESYNC_ROLE", "").strip()
 registered_roles = project.get("roles", []) or []
-
-def get(path, timeout=5):
-    req = urllib.request.Request(f"{api}{path}", headers={"X-API-Key": api_key})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.load(r)
 
 def fmt(v): return v if v else "(not set)"
 
@@ -173,46 +163,33 @@ if status_ok != "yes":
     print()
     sys.exit(0)
 
-# Peers attached to THIS PROJECT's folder
+# Peers attached to THIS PROJECT's folder (via state.gather_peers — same
+# Syncthing calls as before, one source). Self-excluded + pid-sorted inside.
 print()
 print(f"  Peers on project '{project_name}':")
-try:
-    folder = get(f"/rest/config/folders/{folder_id}")
-    folder_devices = {d.get("deviceID") for d in folder.get("devices", []) if d.get("deviceID") != device_id}
-    conns_doc = get("/rest/system/connections")
-    conns = conns_doc.get("connections", {})
-    all_devices = {d["deviceID"]: d for d in get("/rest/config/devices")}
+pdata = state.gather_peers(cfg, project_name)
+if not pdata["syncthing_ok"]:
+    print("    (failed to fetch peer info)")
+elif not pdata["peers"]:
+    print("    (none — run /codesync-pair --peer <id> to add one)")
+else:
+    for p in pdata["peers"]:
+        tag = "connected" if p["connected"] else "DISCONNECTED"
+        suffix = f"  {p['address']}" if p["connected"] and p["address"] else ""
+        print(f"    {p['name']}  ({p['id_short']}…)  →  {tag}{suffix}")
 
-    if not folder_devices:
-        print("    (none — run /codesync-pair --peer <id> to add one)")
-    else:
-        for pid in sorted(folder_devices):
-            d = all_devices.get(pid, {})
-            name = d.get("name") or "(unnamed)"
-            c = conns.get(pid, {})
-            connected = bool(c.get("connected"))
-            addr = c.get("address", "") or ""
-            tag = "connected" if connected else "DISCONNECTED"
-            suffix = f"  {addr}" if connected and addr else ""
-            print(f"    {name}  ({pid[:7]}…)  →  {tag}{suffix}")
-except urllib.error.URLError as e:
-    print(f"    (failed to fetch peer info: {e})")
-
-# Folder sync status
+# Folder sync status (via state.gather_folder_status)
 print()
 print(f"  Folder '{folder_id}':")
-try:
-    fstat = get(f"/rest/db/status?folder={folder_id}")
-    state = fstat.get("state", "?")
-    local = fstat.get("localFiles", 0)
-    glob  = fstat.get("globalFiles", 0)
-    need  = fstat.get("needFiles", 0)
-    print(f"    state:        {state}")
-    print(f"    local files:  {local}")
-    print(f"    global files: {glob}")
+fdata = state.gather_folder_status(cfg, project_name)
+if not fdata["syncthing_ok"]:
+    print("    (failed to fetch folder status)")
+else:
+    need = fdata["need_files"]
+    print(f"    state:        {fdata['state']}")
+    print(f"    local files:  {fdata['local_files']}")
+    print(f"    global files: {fdata['global_files']}")
     print(f"    pending:      {need} files to sync" if need else "    pending:      up to date")
-except urllib.error.URLError as e:
-    print(f"    (failed to fetch folder status: {e})")
 
 # Roles in this project
 print()

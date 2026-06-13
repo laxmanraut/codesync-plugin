@@ -32,7 +32,7 @@ except Exception:
 try:
     lib_dir, cfg_path, active_project, active_role = sys.argv[1:5]
     sys.path.insert(0, lib_dir)
-    from frontmatter import read_frontmatter_from_file
+    import state  # single source of truth (eng-review R1)
 
     # No project active in this terminal → silent
     if not active_project:
@@ -81,34 +81,14 @@ try:
     STATUS_PRI = {"todo": 0, "wip": 1, "blocked": 2, "note": 3, "done": 4, "(no-fm)": 5, "": 5}
 
     def scan_inbox(role):
-        inbox_path = os.path.join(proj_path, "_inbox", role)
-        if not os.path.isdir(inbox_path):
-            return []
+        # Delegate to the single source (state.gather_threads), which does the
+        # same walk + frontmatter parse + STATUS_PRI/-mtime sort. Remap the one
+        # key this script's formatter expects (from_identity → from_id) so the
+        # downstream rendering stays byte-identical (eng-review R1).
         entries = []
-        for fn in sorted(os.listdir(inbox_path)):
-            if not fn.endswith(".md") or fn == "README.md":
-                continue
-            full = os.path.join(inbox_path, fn)
-            fm = read_frontmatter_from_file(full) or {}
-            try:
-                mtime = os.path.getmtime(full)
-            except OSError:
-                mtime = 0
-            attach_raw = fm.get("attachments", "")
-            attach_count = len([a for a in attach_raw.split(",") if a.strip()]) if attach_raw else 0
-            entries.append({
-                "file":   fn,
-                "status": fm.get("status", ""),
-                "title":  fm.get("title", "") or fn[:-3],
-                "from":   fm.get("from", ""),
-                "from_id": fm.get("from-identity", ""),
-                "owner":   fm.get("owner", ""),
-                "generated_by": fm.get("generated-by", ""),
-                "attach_count": attach_count,
-                "mtime":  mtime,
-                "age":    short_age(mtime),
-            })
-        entries.sort(key=lambda e: (STATUS_PRI.get(e["status"] or "(no-fm)", 5), -e["mtime"]))
+        for e in state.gather_threads(cfg, active_project, [role]):
+            e["from_id"] = e.pop("from_identity", "")
+            entries.append(e)
         return entries
 
     # Scan each role's inbox
@@ -265,34 +245,27 @@ if [ -n "$API_KEY" ]; then
     # JSON goes via argv, NOT a pipe: `python -` takes its PROGRAM from
     # stdin, so the heredoc already owns that stream — a pipe would be
     # silently discarded and the banner would never print.
-    $PY_BIN - "$PENDING" <<'PY' 2>/dev/null
+    $PY_BIN - "$PENDING" "$SCRIPT_DIR/lib" <<'PY' 2>/dev/null
 import json, sys
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
 try:
-    import re
-    # The device NAME is chosen by the remote (untrusted, unpaired) device
-    # and this output lands in Claude's session context — sanitize hard so a
-    # hostile name can't smuggle control chars or instruction-like lines.
-    # The ID must match Syncthing's strict format or the entry is dropped.
-    ID_RE = re.compile(r'^[A-Z2-7]{7}(-[A-Z2-7]{7}){7}$')
-    def clean(s, n=40):
-        return re.sub(r'[^A-Za-z0-9 ._:-]', '?', str(s))[:n]
-    pending = json.loads(sys.argv[1])
-    if not isinstance(pending, dict) or not pending:
-        sys.exit(0)
-    entries = [(d, i) for d, i in pending.items() if ID_RE.match(str(d))]
+    # Sanitisation + ID validation comes from state.sanitize_pending — the
+    # single source (eng-review R1). Curl fetch stays in bash above; this
+    # block only formats. The device NAME is self-declared by an untrusted
+    # peer, so sanitize_pending strips control chars / instruction-like lines.
+    sys.path.insert(0, sys.argv[2])
+    import state
+    entries = state.sanitize_pending(json.loads(sys.argv[1]))
     if not entries:
         sys.exit(0)
     print()
     print(f"[codesync] {len(entries)} incoming pairing request(s) — a device added this machine and is waiting:")
-    for dev_id, info in entries:
-        name = clean((info or {}).get("name", "") or "unnamed device")
-        seen = clean((info or {}).get("time", ""), 25)
-        print(f"  - \"{name}\"  {dev_id}  (first seen: {seen})")
-        print(f"    Accept: /codesync-pair --peer {dev_id}")
+    for e in entries:
+        print(f"  - \"{e['name']}\"  {e['id']}  (first seen: {e['time']})")
+        print(f"    Accept: /codesync-pair --peer {e['id']}")
     print("  Only accept devices you recognise — pairing shares the project folder with them.")
     print("  (The device name above is self-declared by the requester — verify the ID out-of-band.)")
 except Exception:

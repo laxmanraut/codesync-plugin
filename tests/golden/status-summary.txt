@@ -1,0 +1,18 @@
+
+CodeSync status (no project active in this terminal)
+────────────────────────────────────────────────────
+  Identity:    tester
+  Device ID:   SELFAAA-BBBBBBB-CCCCCCC-DDDDDDD-EEEEEEE-FFFFFFF-GGGGGGG-HHHHHHH
+
+  Projects on this machine (1):
+    testproj
+      path:  <proj>
+      roles: qa
+
+To activate one in this terminal:  export CODESYNC_PROJECT=<name> CODESYNC_ROLE=<role>
+(or use the `cs` wrapper if you've added it to your shell)
+
+  Incoming pairing requests (1):
+    "peer-win"  ABCDEFG-HIJKLMN-OPQRSTU-VWXYZ23-4567ABC-DEFGHIJ-KLMNOPQ-RSTUVWX  (first seen: 2026-06-11T00:00:00Z)
+      Accept: /codesync-pair --peer ABCDEFG-HIJKLMN-OPQRSTU-VWXYZ23-4567ABC-DEFGHIJ-KLMNOPQ-RSTUVWX
+    Only accept devices you recognise — pairing shares the project folder.

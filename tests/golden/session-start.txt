@@ -1,0 +1,23 @@
+
+[codesync] Project: testproj  Role: qa
+  Inbox: 1 todo, 1 wip, 1 note
+
+    [todo]     Wire the gateway (from backend/vineer, <age>)
+    [wip]      Refactor the parser (from backend/vineer, <age>)
+    [note]     FYI deploy window (from frontend/laxman, <age>)
+
+  Run /codesync-thread-list to see them, or /codesync-thread-reply <slug> to respond.
+
+  Project docs (1) — read any with Claude when relevant:
+    - handbook.md  — Team docs
+  (Run /codesync-doc-list for details.)
+
+  ─── Project CLAUDE.md (from <proj>/CLAUDE.md) ───
+  (auto-included because your cwd isn't inside the synced project folder;
+   treat as if Claude Code had loaded it natively)
+
+  <!-- codesync-template-v4 -->
+  # CLAUDE
+  project rules
+
+  ─── end CLAUDE.md ───
