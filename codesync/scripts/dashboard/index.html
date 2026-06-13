@@ -30,10 +30,12 @@
   .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
   .dot.ok{background:var(--ok);box-shadow:0 0 8px rgba(56,232,168,.7)}
   .dot.bad{background:var(--bad)}
-  .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0 22px}
-  select{background:var(--card);color:var(--text);border:1px solid var(--border);
-    border-radius:9px;padding:7px 11px;font-size:13.5px;font-family:inherit}
-  .upd{font-size:11.5px;color:var(--muted)}
+  .crumbs{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0 20px;font-size:14px}
+  .crumbs a{color:var(--accent);cursor:pointer;text-decoration:none;font-weight:600}
+  .crumbs a:hover{text-decoration:underline}
+  .crumbs .sep{color:var(--muted)}
+  .crumbs .here{font-weight:700}
+  .upd{font-size:11.5px;color:var(--muted);margin-left:auto}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   @media(max-width:760px){.grid{grid-template-columns:1fr}}
   .card{background:var(--card);border:1px solid var(--border);border-radius:16px;
@@ -51,28 +53,44 @@
   .row .title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .row .sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .row .sub .mono{font-family:var(--mono);font-size:11px}
-  .badge{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
-    padding:3px 8px;border-radius:999px;white-space:nowrap}
-  .b-todo{background:rgba(124,131,255,.18);color:#bcc0ff}
-  .b-wip{background:rgba(255,206,90,.16);color:var(--warn)}
-  .b-blocked{background:rgba(255,107,107,.16);color:var(--bad)}
-  .b-note{background:rgba(255,255,255,.08);color:var(--dim)}
-  .b-done{background:rgba(56,232,168,.14);color:var(--ok)}
-  .b-auto{background:rgba(52,224,255,.14);color:var(--cyan)}
-  .pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+  /* clickable project rows */
+  .prow{display:flex;align-items:center;gap:12px;padding:14px 14px;margin:8px 0;
+    border:1px solid var(--border);border-radius:13px;background:rgba(255,255,255,.025);
+    cursor:pointer;transition:transform .18s,border-color .2s,background .2s}
+  .prow:hover{transform:translateX(3px);border-color:var(--accent);background:rgba(124,131,255,.08)}
+  .prow .pname{font-weight:800;font-size:16px;letter-spacing:-.01em}
+  .prow .ppath{font-size:11.5px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prow .pmeta{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .prow .chev{color:var(--muted);font-size:18px}
+  .tag{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+    padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.08);color:var(--dim);white-space:nowrap}
+  .tag.warn{background:rgba(255,206,90,.16);color:var(--warn)}
+  /* agents */
+  .agent{display:flex;align-items:center;gap:11px;padding:11px 0;border-top:1px solid rgba(255,255,255,.06)}
+  .agent:first-of-type{border-top:0}
+  .agent .av{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-weight:800;font-size:13px;flex-shrink:0;
+    background:rgba(124,131,255,.16);color:#bcc0ff}
+  .agent.self .av{background:var(--grad);color:#fff}
+  .agent .main{flex:1;min-width:0}
+  .agent .nm{font-weight:700}
+  .agent .sub{font-size:12px;color:var(--muted)}
+  .agent .sub .mono{font-family:var(--mono);font-size:11px}
+  .pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap}
   .pill.on{background:rgba(56,232,168,.14);color:var(--ok)}
   .pill.off{background:rgba(255,255,255,.07);color:var(--muted)}
-  .btn{background:var(--grad);color:#fff;border:0;border-radius:9px;padding:7px 14px;
-    font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
+  .pill.you{background:rgba(124,131,255,.16);color:#bcc0ff}
+  .badge{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:3px 8px;border-radius:999px;white-space:nowrap}
+  .b-todo{background:rgba(124,131,255,.18);color:#bcc0ff}.b-wip{background:rgba(255,206,90,.16);color:var(--warn)}
+  .b-blocked{background:rgba(255,107,107,.16);color:var(--bad)}.b-note{background:rgba(255,255,255,.08);color:var(--dim)}
+  .b-done{background:rgba(56,232,168,.14);color:var(--ok)}.b-auto{background:rgba(52,224,255,.14);color:var(--cyan)}
+  .role{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:rgba(255,255,255,.07);color:var(--dim);margin-left:5px}
+  .btn{background:var(--grad);color:#fff;border:0;border-radius:9px;padding:7px 14px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
   .btn:disabled{opacity:.5;cursor:default}
-  .pend{border:1px dashed rgba(176,107,255,.4);background:rgba(176,107,255,.06);
-    border-radius:11px;padding:11px 13px;margin-top:8px}
+  .pend{border:1px dashed rgba(176,107,255,.4);background:rgba(176,107,255,.06);border-radius:11px;padding:11px 13px;margin-top:8px}
   .pend .nm{font-weight:700}
   .pend .idr{font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all;margin:3px 0 9px}
   .warnline{font-size:11.5px;color:var(--muted);margin-top:10px}
-  .stat{display:flex;gap:22px;flex-wrap:wrap}
-  .stat .n{font-size:26px;font-weight:900;letter-spacing:-.02em}
-  .stat .l{font-size:12px;color:var(--muted)}
+  .stat{display:flex;gap:22px;flex-wrap:wrap}.stat .n{font-size:26px;font-weight:900;letter-spacing:-.02em}.stat .l{font-size:12px;color:var(--muted)}
   .err{color:var(--bad);font-size:12.5px;margin-top:6px}
   footer{margin-top:30px;font-size:11.5px;color:var(--muted);text-align:center}
 </style>
@@ -88,195 +106,242 @@
     </div>
   </header>
 
-  <div class="bar">
-    <label class="upd">Project</label>
-    <select id="proj"></select>
+  <div class="crumbs">
+    <a id="crumb-root">Projects</a>
+    <span id="crumb-tail" style="display:none"><span class="sep">/</span> <span class="here" id="crumb-name"></span></span>
     <span class="upd" id="updated"></span>
   </div>
 
-  <div class="grid">
-    <section class="card span" id="card-pending" style="display:none">
-      <h2>Incoming pairing requests <span class="count" id="c-pending"></span></h2>
-      <div id="pending"></div>
-      <div class="warnline">Only accept devices you recognise — verify the ID out-of-band. Accepting trusts the device (folder sharing still happens via <span style="font-family:var(--mono)">/codesync-pair</span> in a terminal).</div>
-    </section>
+  <!-- machine-level pending pairing requests: always visible when present -->
+  <section class="card span" id="card-pending" style="display:none;margin-bottom:16px">
+    <h2>Incoming pairing requests <span class="count" id="c-pending"></span></h2>
+    <div id="pending"></div>
+    <div class="warnline">Only accept devices you recognise — verify the ID out-of-band. Accepting trusts the device; folder sharing still happens via <span style="font-family:var(--mono)">/codesync-pair</span> in a terminal.</div>
+  </section>
 
-    <section class="card">
-      <h2>Peers <span class="count" id="c-peers"></span></h2>
-      <div id="peers"><div class="empty">…</div></div>
-    </section>
+  <!-- LIST VIEW: projects -->
+  <section id="view-list">
+    <div id="projects"><div class="empty">…</div></div>
+  </section>
 
-    <section class="card">
-      <h2>Folder sync</h2>
-      <div id="folder"><div class="empty">…</div></div>
-    </section>
-
-    <section class="card span">
-      <h2>Threads <span class="count" id="c-threads"></span></h2>
-      <div id="threads"><div class="empty">…</div></div>
-    </section>
-
-    <section class="card span">
-      <h2>Time to notice <span class="count" id="c-activity"></span></h2>
-      <div id="activity"><div class="empty">…</div></div>
-    </section>
-  </div>
+  <!-- DETAIL VIEW: one project -->
+  <section id="view-detail" style="display:none">
+    <div class="grid">
+      <section class="card span">
+        <h2>Agents on this project <span class="count" id="c-agents"></span></h2>
+        <div id="agents"><div class="empty">…</div></div>
+      </section>
+      <section class="card">
+        <h2>Folder sync</h2>
+        <div id="folder"><div class="empty">…</div></div>
+      </section>
+      <section class="card">
+        <h2>Time to notice <span class="count" id="c-activity"></span></h2>
+        <div id="activity"><div class="empty">…</div></div>
+      </section>
+      <section class="card span">
+        <h2>Threads <span class="count" id="c-threads"></span></h2>
+        <div id="threads"><div class="empty">…</div></div>
+      </section>
+    </div>
+  </section>
 
   <footer>read-only · localhost · auto-refreshes every 4s · close the tab or run <span style="font-family:var(--mono)">/codesync-dashboard --stop</span> to end</footer>
 </div>
 
 <script>
 "use strict";
-// Token comes from the URL the launcher opened (?t=...). Every request carries it.
 const TOKEN = new URLSearchParams(location.search).get("t") || "";
-let CURRENT = "";        // selected project
-let projectsKnown = [];
+let VIEW = "list";        // 'list' | 'detail'
+let CURRENT = "";         // selected project (detail view)
+let OVERVIEW = {projects:[]};   // last overview, for project metadata in detail
 
 function api(path){
-  return fetch(path, {headers:{"X-CSDash-Token":TOKEN}})
-    .then(r => { if(!r.ok) throw new Error(r.status); return r.json(); });
+  return fetch(path,{headers:{"X-CSDash-Token":TOKEN}})
+    .then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); });
 }
-// el(tag, {class,text,...}, children) — text is set via textContent (never innerHTML).
-function el(tag, attrs, kids){
-  const n = document.createElement(tag);
+function el(tag,attrs,kids){
+  const n=document.createElement(tag);
   if(attrs) for(const k in attrs){
-    if(k === "text") n.textContent = attrs[k];
-    else if(k === "class") n.className = attrs[k];
-    else n.setAttribute(k, attrs[k]);
+    if(k==="text") n.textContent=attrs[k];
+    else if(k==="class") n.className=attrs[k];
+    else n.setAttribute(k,attrs[k]);
   }
-  (kids||[]).forEach(c => c && n.appendChild(c));
+  (kids||[]).forEach(c=>c&&n.appendChild(c));
   return n;
 }
-function clear(node){ while(node.firstChild) node.removeChild(node.firstChild); }
-function fmtSecs(s){
-  if(s == null) return "—";
-  s = Math.round(s);
-  if(s < 60) return s+"s";
-  if(s < 3600) return Math.round(s/60)+"m";
-  if(s < 86400) return Math.round(s/3600)+"h";
-  return Math.round(s/86400)+"d";
-}
+function clear(n){ while(n.firstChild) n.removeChild(n.firstChild); }
+function fmtSecs(s){ if(s==null)return"—"; s=Math.round(s);
+  if(s<60)return s+"s"; if(s<3600)return Math.round(s/60)+"m";
+  if(s<86400)return Math.round(s/3600)+"h"; return Math.round(s/86400)+"d"; }
+function initials(name){ const w=(name||"").replace(/[^A-Za-z0-9 ]/g,"").trim().split(/\s+|-/);
+  return ((w[0]||"?")[0]+((w[1]||"")[0]||"")).toUpperCase(); }
 
-function renderOverview(o){
-  document.getElementById("m-identity").textContent = o.identity ? ("identity: "+o.identity) : "";
-  document.getElementById("m-device").textContent = o.device_id || "";
-  const sel = document.getElementById("proj");
-  const names = o.projects.map(p=>p.name);
-  if(JSON.stringify(names) !== JSON.stringify(projectsKnown)){
-    projectsKnown = names;
-    clear(sel);
-    o.projects.forEach(p => sel.appendChild(el("option",{value:p.name,text:p.name})));
-    if(!CURRENT && names.length) CURRENT = names[0];
-    sel.value = CURRENT;
-  }
-  sel.style.display = names.length > 1 ? "" : "none";
+// ── view switching ─────────────────────────────────────────────────────────
+function showList(){ VIEW="list"; CURRENT="";
+  document.getElementById("view-list").style.display="";
+  document.getElementById("view-detail").style.display="none";
+  document.getElementById("crumb-tail").style.display="none";
+  refresh();
 }
-
-function renderPeers(d){
-  const dot = document.getElementById("st-dot"), txt = document.getElementById("st-text");
-  if(d.syncthing_ok){ dot.className="dot ok"; txt.textContent="Syncthing online"; }
-  else { dot.className="dot bad"; txt.textContent="Syncthing offline"; }
-  const box = document.getElementById("peers"); clear(box);
-  document.getElementById("c-peers").textContent = d.syncthing_ok ? (d.peers.length||"") : "";
-  if(!d.syncthing_ok){ box.appendChild(el("div",{class:"empty",text:"Syncthing offline — peer status unavailable."})); }
-  else if(!d.peers.length){ box.appendChild(el("div",{class:"empty",text:"No peers on this project yet."})); }
-  else d.peers.forEach(p=>{
-    const pill = el("span",{class:"pill "+(p.connected?"on":"off"),text:p.connected?"connected":"offline"});
-    const sub = el("div",{class:"sub"},[el("span",{class:"mono",text:p.id_short+"…"}), document.createTextNode(p.connected&&p.address?("  "+p.address):"")]);
-    box.appendChild(el("div",{class:"row"},[el("div",{class:"main"},[el("div",{class:"title",text:p.name}),sub]),pill]));
+function showDetail(name){ VIEW="detail"; CURRENT=name;
+  document.getElementById("view-list").style.display="none";
+  document.getElementById("view-detail").style.display="";
+  document.getElementById("crumb-tail").style.display="";
+  document.getElementById("crumb-name").textContent=name;
+  // reset detail panels to loading so stale data isn't shown across projects
+  ["agents","folder","threads","activity"].forEach(id=>{
+    const b=document.getElementById(id); clear(b); b.appendChild(el("div",{class:"empty",text:"…"}));
   });
-  // folder
-  const fb = document.getElementById("folder"); clear(fb);
-  const f = d.folder||{};
-  if(!f.syncthing_ok){ fb.appendChild(el("div",{class:"empty",text:"Offline."})); }
-  else {
-    fb.appendChild(el("div",{class:"stat"},[
-      el("div",{},[el("div",{class:"n",text:String(f.state||"?")}),el("div",{class:"l",text:"state"})]),
-      el("div",{},[el("div",{class:"n",text:String(f.local_files)}),el("div",{class:"l",text:"local files"})]),
-      el("div",{},[el("div",{class:"n",text:String(f.need_files)}),el("div",{class:"l",text:f.need_files?"to sync":"up to date"})]),
-    ]));
-  }
+  refresh();
 }
+document.getElementById("crumb-root").addEventListener("click",showList);
 
-function renderPending(d){
-  const card = document.getElementById("card-pending"), box = document.getElementById("pending");
-  clear(box);
-  const list = d.pending||[];
-  document.getElementById("c-pending").textContent = list.length||"";
-  card.style.display = list.length ? "" : "none";
-  list.forEach(p=>{
-    const btn = el("button",{class:"btn",text:"Accept"});
-    btn.addEventListener("click",()=>accept(p.id, btn));
-    box.appendChild(el("div",{class:"pend"},[
-      el("div",{class:"nm",text:'"'+p.name+'"'}),
-      el("div",{class:"idr",text:p.id}),
-      el("div",{},[btn, el("span",{class:"upd",text:"  first seen: "+p.time})]),
-    ]));
-  });
+// ── renderers ───────────────────────────────────────────────────────────────
+function renderHeader(o){
+  OVERVIEW=o;
+  document.getElementById("m-identity").textContent=o.identity?("identity: "+o.identity):"";
+  document.getElementById("m-device").textContent=o.device_id||"";
 }
-
-function accept(id, btn){
-  btn.disabled = true; btn.textContent = "Accepting…";
-  fetch("/api/accept-pairing",{method:"POST",
-    headers:{"X-CSDash-Token":TOKEN,"Content-Type":"application/json"},
-    body:JSON.stringify({device_id:id})})
-    .then(r=>r.json())
-    .then(res=>{ if(!res.ok){ btn.disabled=false; btn.textContent="Retry";
-        const e=el("div",{class:"err",text:res.error||res.message||"failed"}); btn.parentNode.appendChild(e);}
-      else { refresh(); } })
-    .catch(()=>{ btn.disabled=false; btn.textContent="Retry"; });
-}
-
-function renderThreads(d){
-  const box = document.getElementById("threads"); clear(box);
-  const t = d.threads||[];
-  document.getElementById("c-threads").textContent = t.length||"";
-  if(!t.length){ box.appendChild(el("div",{class:"empty",text:"No threads in this project's inboxes."})); return; }
-  t.slice(0,40).forEach(x=>{
-    const st = x.status||"note";
-    const badge = el("span",{class:"badge b-"+(["todo","wip","blocked","note","done"].includes(st)?st:"note"),text:st});
-    const who = x.from ? ("from "+x.from+(x.from_identity?("/"+x.from_identity):"")) : "";
-    const bits = [who, "→"+x.role, x.age].filter(Boolean).join(" · ");
-    const subKids = [document.createTextNode(bits)];
-    if(x.owner) subKids.push(el("span",{text:"  [owned by "+x.owner+"]"}));
-    if(x.attach_count) subKids.push(el("span",{text:"  [+"+x.attach_count+" attach]"}));
-    const row = el("div",{class:"row"},[
-      el("div",{class:"main"},[el("div",{class:"title",text:x.title}),el("div",{class:"sub"},subKids)]),
-      badge,
+function renderProjects(o){
+  const box=document.getElementById("projects"); clear(box);
+  if(!o.projects.length){ box.appendChild(el("div",{class:"empty",text:"No projects registered on this machine yet. Run /install-codesync."})); return; }
+  o.projects.forEach(p=>{
+    const meta=el("div",{class:"pmeta"},[
+      el("span",{class:"tag",text:(p.roles.length||0)+" role"+(p.roles.length===1?"":"s")}),
+      p.exists?null:el("span",{class:"tag warn",text:"missing folder"}),
+      el("span",{class:"chev",text:"›"}),
     ]);
-    if(x.generated_by==="auto") row.insertBefore(el("span",{class:"badge b-auto",text:"auto"}), badge);
+    const row=el("div",{class:"prow"},[
+      el("div",{class:"main",style:"min-width:0"},[
+        el("div",{class:"pname",text:p.name}),
+        el("div",{class:"ppath",text:p.path||""}),
+      ]),
+      meta,
+    ]);
+    row.addEventListener("click",()=>showDetail(p.name));
     box.appendChild(row);
   });
 }
+function renderStatus(ok){
+  const dot=document.getElementById("st-dot"), txt=document.getElementById("st-text");
+  if(ok){dot.className="dot ok";txt.textContent="Syncthing online";}
+  else{dot.className="dot bad";txt.textContent="Syncthing offline";}
+}
+function projRoles(name){ const p=(OVERVIEW.projects||[]).find(x=>x.name===name); return p?p.roles:[]; }
 
+function renderAgents(d){
+  renderStatus(d.syncthing_ok);
+  const box=document.getElementById("agents"); clear(box);
+  const peers=d.peers||[];
+  // self first — this machine is always an agent on its own projects
+  const myRoles=projRoles(d.project);
+  const selfSub=el("div",{class:"sub"},[el("span",{class:"mono",text:(OVERVIEW.device_id||"").slice(0,7)+"…"})]);
+  myRoles.forEach(r=>selfSub.appendChild(el("span",{class:"role",text:r})));
+  box.appendChild(el("div",{class:"agent self"},[
+    el("div",{class:"av",text:initials(OVERVIEW.identity||"me")}),
+    el("div",{class:"main"},[el("div",{class:"nm",text:(OVERVIEW.identity||"this machine")}),selfSub]),
+    el("span",{class:"pill you",text:"this machine"}),
+  ]));
+  document.getElementById("c-agents").textContent=(peers.length+1);
+  if(!d.syncthing_ok){
+    box.appendChild(el("div",{class:"empty",text:"Syncthing offline — connected peers can't be listed right now."}));
+    return;
+  }
+  if(!peers.length){
+    box.appendChild(el("div",{class:"empty",text:"No other agents paired to this project yet. Pair one with /codesync-pair."}));
+    return;
+  }
+  peers.forEach(p=>{
+    const sub=el("div",{class:"sub"},[el("span",{class:"mono",text:p.id_short+"…"}),
+      document.createTextNode(p.connected&&p.address?("  "+p.address):"")]);
+    box.appendChild(el("div",{class:"agent"},[
+      el("div",{class:"av",text:initials(p.name)}),
+      el("div",{class:"main"},[el("div",{class:"nm",text:p.name}),sub]),
+      el("span",{class:"pill "+(p.connected?"on":"off"),text:p.connected?"connected":"offline"}),
+    ]));
+  });
+  // folder panel rides along on the same payload
+  const fb=document.getElementById("folder"); clear(fb); const f=d.folder||{};
+  if(!f.syncthing_ok){ fb.appendChild(el("div",{class:"empty",text:"Offline."})); }
+  else fb.appendChild(el("div",{class:"stat"},[
+    el("div",{},[el("div",{class:"n",text:String(f.state||"?")}),el("div",{class:"l",text:"state"})]),
+    el("div",{},[el("div",{class:"n",text:String(f.local_files)}),el("div",{class:"l",text:"local files"})]),
+    el("div",{},[el("div",{class:"n",text:String(f.need_files)}),el("div",{class:"l",text:f.need_files?"to sync":"up to date"})]),
+  ]));
+}
+function renderPending(d){
+  const card=document.getElementById("card-pending"), box=document.getElementById("pending"); clear(box);
+  const list=d.pending||[];
+  document.getElementById("c-pending").textContent=list.length||"";
+  card.style.display=list.length?"":"none";
+  list.forEach(p=>{
+    const btn=el("button",{class:"btn",text:"Accept"});
+    btn.addEventListener("click",()=>accept(p.id,btn));
+    box.appendChild(el("div",{class:"pend"},[
+      el("div",{class:"nm",text:'"'+p.name+'"'}),
+      el("div",{class:"idr",text:p.id}),
+      el("div",{},[btn,el("span",{class:"upd",style:"margin-left:10px",text:"first seen: "+p.time})]),
+    ]));
+  });
+}
+function accept(id,btn){
+  btn.disabled=true; btn.textContent="Accepting…";
+  fetch("/api/accept-pairing",{method:"POST",
+    headers:{"X-CSDash-Token":TOKEN,"Content-Type":"application/json"},
+    body:JSON.stringify({device_id:id})})
+    .then(r=>r.json()).then(res=>{
+      if(!res.ok){ btn.disabled=false; btn.textContent="Retry";
+        btn.parentNode.appendChild(el("div",{class:"err",text:res.error||res.message||"failed"})); }
+      else refresh();
+    }).catch(()=>{ btn.disabled=false; btn.textContent="Retry"; });
+}
+function renderThreads(d){
+  const box=document.getElementById("threads"); clear(box); const t=d.threads||[];
+  document.getElementById("c-threads").textContent=t.length||"";
+  if(!t.length){ box.appendChild(el("div",{class:"empty",text:"No threads in this project's inboxes."})); return; }
+  t.slice(0,40).forEach(x=>{
+    const st=x.status||"note";
+    const badge=el("span",{class:"badge b-"+(["todo","wip","blocked","note","done"].includes(st)?st:"note"),text:st});
+    const who=x.from?("from "+x.from+(x.from_identity?("/"+x.from_identity):"")):"";
+    const sub=el("div",{class:"sub"},[document.createTextNode([who,"→"+x.role,x.age].filter(Boolean).join(" · "))]);
+    if(x.owner) sub.appendChild(el("span",{text:"  [owned by "+x.owner+"]"}));
+    if(x.attach_count) sub.appendChild(el("span",{text:"  [+"+x.attach_count+" attach]"}));
+    const row=el("div",{class:"row"},[el("div",{class:"main"},[el("div",{class:"title",text:x.title}),sub]),badge]);
+    if(x.generated_by==="auto") row.insertBefore(el("span",{class:"badge b-auto",text:"auto"}),badge);
+    box.appendChild(row);
+  });
+}
 function renderActivity(d){
-  const box = document.getElementById("activity"); clear(box);
-  const a = d.activity||{};
-  document.getElementById("c-activity").textContent = a.samples ? (a.samples+" samples") : "";
+  const box=document.getElementById("activity"); clear(box); const a=d.activity||{};
+  document.getElementById("c-activity").textContent=a.samples?(a.samples+" samples"):"";
   box.appendChild(el("div",{class:"stat"},[
     el("div",{},[el("div",{class:"n",text:a.median_seconds!=null?fmtSecs(a.median_seconds):"—"}),el("div",{class:"l",text:"median time to notice"})]),
     el("div",{},[el("div",{class:"n",text:String(a.samples||0)}),el("div",{class:"l",text:"measured handoffs"})]),
   ]));
-  if(!a.samples) box.appendChild(el("div",{class:"empty",text:"No measured handoffs yet — this fills in as threads arrive and get surfaced."}));
+  if(!a.samples) box.appendChild(el("div",{class:"empty",text:"No measured handoffs yet — fills in as threads arrive and get surfaced."}));
 }
 
+// ── poll loop ────────────────────────────────────────────────────────────────
 function refresh(){
-  const p = CURRENT ? ("?project="+encodeURIComponent(CURRENT)) : "";
-  api("/api/overview").then(renderOverview).catch(showDown);
-  api("/api/peers"+p).then(renderPeers).catch(showDown);
+  api("/api/overview").then(o=>{renderHeader(o); if(VIEW==="list") renderProjects(o);}).catch(showDown);
   api("/api/pending").then(renderPending).catch(()=>{});
-  api("/api/threads"+p).then(renderThreads).catch(()=>{});
-  api("/api/activity"+p).then(renderActivity).catch(()=>{});
-  document.getElementById("updated").textContent = "updated "+new Date().toLocaleTimeString();
+  if(VIEW==="detail" && CURRENT){
+    const q="?project="+encodeURIComponent(CURRENT);
+    api("/api/peers"+q).then(renderAgents).catch(showDown);
+    api("/api/threads"+q).then(renderThreads).catch(()=>{});
+    api("/api/activity"+q).then(renderActivity).catch(()=>{});
+  } else {
+    // list view: still reflect Syncthing reachability in the header dot
+    api("/api/peers").then(d=>renderStatus(d.syncthing_ok)).catch(()=>{});
+  }
+  document.getElementById("updated").textContent="updated "+new Date().toLocaleTimeString();
 }
-function showDown(){
-  const dot=document.getElementById("st-dot"), txt=document.getElementById("st-text");
-  dot.className="dot bad"; txt.textContent="dashboard server unreachable";
-}
+function showDown(){ const dot=document.getElementById("st-dot"),txt=document.getElementById("st-text");
+  dot.className="dot bad"; txt.textContent="dashboard server unreachable"; }
 
-document.getElementById("proj").addEventListener("change",e=>{CURRENT=e.target.value;refresh();});
 refresh();
-setInterval(refresh, 4000);
+setInterval(refresh,4000);
 </script>
 </body>
 </html>
