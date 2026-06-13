@@ -131,13 +131,26 @@
         <h2>Agents on this project <span class="count" id="c-agents"></span></h2>
         <div id="agents"><div class="empty">…</div></div>
       </section>
-      <section class="card">
-        <h2>Folder sync</h2>
-        <div id="folder"><div class="empty">…</div></div>
+      <section class="card span">
+        <h2>Needs attention <span class="count" id="c-attn"></span></h2>
+        <div id="attention"><div class="empty">…</div></div>
+      </section>
+      <section class="card span">
+        <h2>Activity <span class="count" id="c-feed"></span></h2>
+        <div id="feed"><div class="empty">…</div></div>
+        <div class="warnline">Recent activity, reconstructed from file history — not a complete audit log. Peer connect/disconnect isn't tracked here (see Agents for live status).</div>
       </section>
       <section class="card">
-        <h2>Time to notice <span class="count" id="c-activity"></span></h2>
-        <div id="activity"><div class="empty">…</div></div>
+        <h2>Autopilot</h2>
+        <div id="autopilot"><div class="empty">…</div></div>
+      </section>
+      <section class="card">
+        <h2>Metrics</h2>
+        <div id="metrics"><div class="empty">…</div></div>
+      </section>
+      <section class="card span">
+        <h2>Folder sync</h2>
+        <div id="folder"><div class="empty">…</div></div>
       </section>
       <section class="card span">
         <h2>Threads <span class="count" id="c-threads"></span></h2>
@@ -190,7 +203,7 @@ function showDetail(name){ VIEW="detail"; CURRENT=name;
   document.getElementById("crumb-tail").style.display="";
   document.getElementById("crumb-name").textContent=name;
   // reset detail panels to loading so stale data isn't shown across projects
-  ["agents","folder","threads","activity"].forEach(id=>{
+  ["agents","attention","feed","autopilot","metrics","folder","threads"].forEach(id=>{
     const b=document.getElementById(id); clear(b); b.appendChild(el("div",{class:"empty",text:"…"}));
   });
   refresh();
@@ -312,14 +325,84 @@ function renderThreads(d){
     box.appendChild(row);
   });
 }
-function renderActivity(d){
-  const box=document.getElementById("activity"); clear(box); const a=d.activity||{};
-  document.getElementById("c-activity").textContent=a.samples?(a.samples+" samples"):"";
+// v0.25: the activity-full payload feeds four panels.
+function renderActivityFull(d){
+  renderAttention(d.attention||{});
+  renderFeed(d.feed||[]);
+  renderAutopilot(d.autopilot||{});
+  renderMetrics(d.metrics||{});
+}
+const FEED_KIND={active:["active","b-todo"],archived:["archived","b-done"],
+  noticed:["noticed","b-note"],autopilot:["auto-reply","b-auto"]};
+function renderFeed(feed){
+  const box=document.getElementById("feed"); clear(box);
+  document.getElementById("c-feed").textContent=feed.length?(feed.length>=50?"50+":feed.length):"";
+  if(!feed.length){ box.appendChild(el("div",{class:"empty",text:"No recent activity yet — fills in as threads arrive, get noticed, and get replies."})); return; }
+  feed.forEach(e=>{
+    const k=FEED_KIND[e.kind]||["event","b-note"];
+    const sub=[e.role?("→"+e.role):"", e.from?("from "+e.from):"", e.age].filter(Boolean).join(" · ");
+    box.appendChild(el("div",{class:"row"},[
+      el("span",{class:"badge "+k[1],text:k[0]}),
+      el("div",{class:"main"},[el("div",{class:"title",text:e.title||e.slug||""}),el("div",{class:"sub",text:sub})]),
+    ]));
+  });
+}
+function attnGroup(box,label,items,cls){
+  if(!items||!items.length) return;
+  box.appendChild(el("div",{class:"sub",style:"margin:8px 0 2px;font-weight:700;color:var(--dim)",text:label+" ("+items.length+")"}));
+  items.forEach(it=>box.appendChild(el("div",{class:"row"},[
+    el("div",{class:"main"},[el("div",{class:"title",text:it.title}),
+      el("div",{class:"sub",text:["→"+it.role,it.status,it.age].filter(Boolean).join(" · ")})]),
+    el("span",{class:"badge "+cls,text:it.status||"—"}),
+  ])));
+}
+function renderAttention(a){
+  const box=document.getElementById("attention"); clear(box);
+  const n=(a.stale||[]).length+(a.unclaimed||[]).length+(a.blocked||[]).length+(a.dead_letter||[]).length;
+  document.getElementById("c-attn").textContent=n||"";
+  if(!n){ box.appendChild(el("div",{class:"empty",text:"Nothing needs attention — no stale, blocked, unclaimed, or dead-lettered threads. ✓"})); return; }
+  attnGroup(box,"Blocked",a.blocked,"b-blocked");
+  attnGroup(box,"Stale (open > "+(a.stale_days||3)+"d)",a.stale,"b-wip");
+  attnGroup(box,"Unclaimed todos",a.unclaimed,"b-todo");
+  if(a.dead_letter&&a.dead_letter.length){
+    attnGroup(box,"Dead-letter (role has no profile)",a.dead_letter,"b-note");
+    box.appendChild(el("div",{class:"warnline",text:"Dead-letter is partial: peers' registered roles aren't synced, so this only flags roles with no _roles/ profile here."}));
+  }
+}
+function renderAutopilot(ap){
+  const box=document.getElementById("autopilot"); clear(box);
+  if(!ap.enabled){ box.appendChild(el("div",{class:"empty",text:"Autopilot off (or not available on this machine)."})); return; }
   box.appendChild(el("div",{class:"stat"},[
-    el("div",{},[el("div",{class:"n",text:a.median_seconds!=null?fmtSecs(a.median_seconds):"—"}),el("div",{class:"l",text:"median time to notice"})]),
-    el("div",{},[el("div",{class:"n",text:String(a.samples||0)}),el("div",{class:"l",text:"measured handoffs"})]),
+    el("div",{},[el("div",{class:"n",text:ap.last_run_age||"—"}),el("div",{class:"l",text:"last run"})]),
+    el("div",{},[el("div",{class:"n",text:String(ap.runs_last_hour||0)}),el("div",{class:"l",text:"runs last hour"})]),
   ]));
-  if(!a.samples) box.appendChild(el("div",{class:"empty",text:"No measured handoffs yet — fills in as threads arrive and get surfaced."}));
+  const rec=ap.recent||[];
+  if(rec.length){
+    box.appendChild(el("div",{class:"sub",style:"margin:10px 0 2px;font-weight:700;color:var(--dim)",text:"Recent auto-replies"}));
+    rec.slice(0,6).forEach(r=>box.appendChild(el("div",{class:"row"},[
+      el("span",{class:"badge b-auto",text:"auto"}),
+      el("div",{class:"main"},[el("div",{class:"title",text:r.thread}),el("div",{class:"sub",text:r.when})]),
+    ])));
+  } else box.appendChild(el("div",{class:"empty",text:"No auto-replies yet."}));
+}
+function renderMetrics(m){
+  const box=document.getElementById("metrics"); clear(box);
+  if(m.open==null){ box.appendChild(el("div",{class:"empty",text:"…"})); return; }
+  box.appendChild(el("div",{class:"stat"},[
+    el("div",{},[el("div",{class:"n",text:String(m.open)}),el("div",{class:"l",text:"open"})]),
+    el("div",{},[el("div",{class:"n",text:String(m.done)}),el("div",{class:"l",text:"done"})]),
+    el("div",{},[el("div",{class:"n",text:String(m.active_7d||0)}),el("div",{class:"l",text:"active 7d"})]),
+    el("div",{},[el("div",{class:"n",text:m.oldest_open_age||"—"}),el("div",{class:"l",text:"oldest open"})]),
+    el("div",{},[el("div",{class:"n",text:m.ttn_median_seconds!=null?fmtSecs(m.ttn_median_seconds):"—"}),el("div",{class:"l",text:"median notice ("+(m.ttn_samples||0)+")"})]),
+  ]));
+  const roles=Object.keys(m.by_role||{});
+  if(roles.length){
+    box.appendChild(el("div",{class:"sub",style:"margin:10px 0 2px;font-weight:700;color:var(--dim)",text:"Open by role"}));
+    roles.sort().forEach(r=>box.appendChild(el("div",{class:"row"},[
+      el("div",{class:"main"},[el("div",{class:"title",text:r})]),
+      el("span",{class:"tag",text:String(m.by_role[r])}),
+    ])));
+  }
 }
 
 // ── poll loop ────────────────────────────────────────────────────────────────
@@ -330,7 +413,7 @@ function refresh(){
     const q="?project="+encodeURIComponent(CURRENT);
     api("/api/peers"+q).then(renderAgents).catch(showDown);
     api("/api/threads"+q).then(renderThreads).catch(()=>{});
-    api("/api/activity"+q).then(renderActivity).catch(()=>{});
+    api("/api/activity"+q).then(renderActivityFull).catch(()=>{});
   } else {
     // list view: still reflect Syncthing reachability in the header dot
     api("/api/peers").then(d=>renderStatus(d.syncthing_ok)).catch(()=>{});

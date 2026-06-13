@@ -340,6 +340,234 @@ def calendar_timegm(t):
     return calendar.timegm(t)
 
 
+# ───────────────────── activity & attention (v0.25 / Tranche 2) ─────────────
+# The dashboard's "what's happening / what needs attention" layer. Everything
+# here is DERIVED from persistent timestamps each call (eng-review decision):
+# thread mtimes + the seen-log + the autopilot state json. No new storage, no
+# hook changes, no dependency on Syncthing's ephemeral event stream — so peer
+# connect/disconnect is NOT in the feed (it can't be reconstructed); peer
+# *current* status lives in gather_peers. One inbox+archive walk feeds the
+# feed, attention, and metrics (DRY + the dashboard's 4s-poll budget).
+
+STALE_DAYS = 3      # an open thread older than this is "needs attention"
+FEED_CAP = 50       # most recent events surfaced
+RECENT_AUTOPILOT = 10
+
+
+def _walk_threads(proj_path):
+    """One pass over _inbox/* and _archive/* → list of thread records.
+
+    The single source the feed/attention/metrics all derive from, so the
+    dashboard does not re-walk the tree once per section every poll.
+    """
+    records = []
+    for root in ("_inbox", "_archive"):
+        base = os.path.join(proj_path, root)
+        if not os.path.isdir(base):
+            continue
+        for role in sorted(os.listdir(base)):
+            rdir = os.path.join(base, role)
+            if not os.path.isdir(rdir):
+                continue
+            for fn in sorted(os.listdir(rdir)):
+                if not fn.endswith(".md") or fn == "README.md":
+                    continue
+                full = os.path.join(rdir, fn)
+                try:
+                    mtime = os.path.getmtime(full)
+                except OSError:
+                    mtime = 0
+                fm = _frontmatter(full) or {}
+                attach_raw = fm.get("attachments", "")
+                records.append({
+                    "root": root, "role": role, "slug": fn[:-3],
+                    "rel": f"{root}/{role}/{fn}", "mtime": mtime,
+                    "status": fm.get("status", ""),
+                    "title": fm.get("title", "") or fn[:-3],
+                    "from": fm.get("from", ""),
+                    "from_identity": fm.get("from-identity", ""),
+                    "owner": fm.get("owner", ""),
+                    "generated_by": fm.get("generated-by", ""),
+                    "attach_count": len([a for a in attach_raw.split(",") if a.strip()]) if attach_raw else 0,
+                })
+    return records
+
+
+def _seen_map(config_dir, project_name):
+    """{rel: last-ISO} from seen-<project>.log (config_dir, not expanduser)."""
+    if config_dir:
+        path = os.path.join(config_dir, f"seen-{project_name}.log")
+    else:
+        path = os.path.expanduser(f"~/.config/codesync/seen-{project_name}.log")
+    out = {}
+    if not os.path.exists(path):
+        return out
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line.strip():
+                    continue
+                parts = line.split("\t")
+                if parts and parts[0]:
+                    out[parts[0]] = parts[1] if len(parts) > 1 else ""
+    except Exception:
+        pass
+    return out
+
+
+def _autopilot(config_dir, project_name, now):
+    """Read autopilot-<project>.json (already structured — no log parsing).
+
+    `runs` = run epochs (rate-cap), `processed` = {rel: ISO} when it auto-
+    replied. Returns a client-safe dict plus an internal `_processed` the feed
+    consumes (stripped by the orchestrator before returning to the browser).
+    """
+    if config_dir:
+        path = os.path.join(config_dir, f"autopilot-{project_name}.json")
+    else:
+        path = os.path.expanduser(f"~/.config/codesync/autopilot-{project_name}.json")
+    if not os.path.exists(path):
+        return {"enabled": False, "_processed": {}}
+    try:
+        with open(path) as f:
+            st = json.load(f)
+    except Exception:
+        return {"enabled": False, "_processed": {}}
+    runs = [t for t in st.get("runs", []) if isinstance(t, (int, float))]
+    processed = st.get("processed", {}) if isinstance(st.get("processed"), dict) else {}
+    last_run = max(runs) if runs else None
+    recent = sorted(processed.items(), key=lambda kv: str(kv[1]), reverse=True)[:RECENT_AUTOPILOT]
+    return {
+        "enabled": True,
+        "last_run_age": short_age(last_run, now) if last_run else None,
+        "runs_last_hour": len([t for t in runs if now - t < 3600]),
+        "recent": [{"thread": k.rsplit("/", 1)[-1][:-3] if k.endswith(".md") else k,
+                    "rel": k, "when": v} for k, v in recent],
+        "_processed": processed,
+    }
+
+
+def _feed(records, seen, autopilot_processed, now):
+    """Chronological 'what happened' events, newest first, capped.
+
+    Reconstructed from durable traces — NOT a complete audit log (the UI says
+    so). One thread can yield several events (active + noticed + auto-replied);
+    that is the activity stream, not duplication to dedupe.
+    """
+    ev = []
+    for r in records:
+        ev.append({
+            "ts": r["mtime"],
+            "kind": "archived" if r["root"] == "_archive" else "active",
+            "title": r["title"], "role": r["role"], "slug": r["slug"],
+            "status": r["status"], "from": r["from"],
+            "age": short_age(r["mtime"], now),
+        })
+    for rel, iso in seen.items():
+        ep = _iso_to_epoch(iso)
+        if ep is not None:
+            ev.append({"ts": ep, "kind": "noticed", "rel": rel,
+                       "title": rel.rsplit("/", 1)[-1][:-3], "age": short_age(ep, now)})
+    for rel, iso in (autopilot_processed or {}).items():
+        ep = _iso_to_epoch(iso)
+        if ep is not None:
+            ev.append({"ts": ep, "kind": "autopilot", "rel": rel,
+                       "title": rel.rsplit("/", 1)[-1][:-3], "age": short_age(ep, now)})
+    ev.sort(key=lambda e: e["ts"], reverse=True)
+    return ev[:FEED_CAP]
+
+
+def _attention(records, proj_path, now):
+    """Threads that need a human: stale, unclaimed, blocked, dead-lettered.
+
+    Dead-letter is PARTIAL by design: we can only flag an inbox role with no
+    _roles/<role>.md profile, because peers' registered roles are not synced
+    (eng-review limitation). Cap each list so a flooded inbox stays readable.
+    """
+    roles_dir = os.path.join(proj_path, "_roles")
+    have_profile = set()
+    if os.path.isdir(roles_dir):
+        have_profile = {f[:-3] for f in os.listdir(roles_dir)
+                        if f.endswith(".md") and f != "README.md"}
+    stale, unclaimed, blocked, dead = [], [], [], []
+
+    def item(r):
+        return {"role": r["role"], "slug": r["slug"], "title": r["title"],
+                "status": r["status"], "age": short_age(r["mtime"], now)}
+
+    for r in records:
+        if r["root"] != "_inbox":
+            continue
+        st = r["status"]
+        if st == "blocked":
+            blocked.append(item(r))
+        if st == "todo" and not r["owner"]:
+            unclaimed.append(item(r))
+        if st in ("todo", "wip", "blocked") and (now - r["mtime"]) > STALE_DAYS * 86400:
+            stale.append(item(r))
+        if r["role"] not in have_profile:
+            dead.append(item(r))
+    return {
+        "stale": stale[:20], "unclaimed": unclaimed[:20],
+        "blocked": blocked[:20], "dead_letter": dead[:20],
+        "stale_days": STALE_DAYS,
+    }
+
+
+def _metrics(records, ttn, now):
+    """Cheap, accurate counters from the single walk. (Response-time-per-role
+    needs reply pairing — deferred to keep this honest, not half-built.)"""
+    inbox = [r for r in records if r["root"] == "_inbox"]
+    done = sum(1 for r in inbox if r["status"] == "done")
+    by_role, by_identity = {}, {}
+    oldest = None
+    week = now - 7 * 86400
+    active_7d = 0
+    for r in inbox:
+        if r["status"] != "done":
+            by_role[r["role"]] = by_role.get(r["role"], 0) + 1
+            if oldest is None or r["mtime"] < oldest:
+                oldest = r["mtime"]
+        if r["from_identity"]:
+            by_identity[r["from_identity"]] = by_identity.get(r["from_identity"], 0) + 1
+        if r["mtime"] >= week:
+            active_7d += 1
+    return {
+        "open": len(inbox) - done, "done": done,
+        "by_role": by_role, "by_identity": by_identity,
+        "oldest_open_age": short_age(oldest, now) if oldest else None,
+        "active_7d": active_7d,
+        "ttn_median_seconds": ttn.get("median_seconds"),
+        "ttn_samples": ttn.get("samples", 0),
+    }
+
+
+def gather_activity_full(cfg, project_name, config_dir=None, now=None):
+    """Orchestrator: ONE inbox+archive walk → feed + attention + autopilot +
+    metrics (+ the time-to-notice summary). The dashboard's /api/activity."""
+    now = time.time() if now is None else now
+    empty = {"feed": [], "attention": {}, "autopilot": {"enabled": False}, "metrics": {}}
+    proj = (cfg.get("projects") or {}).get(project_name)
+    if not proj:
+        return empty
+    proj_path = proj.get("path", "")
+    if not proj_path or not os.path.isdir(proj_path):
+        return empty
+    records = _walk_threads(proj_path)
+    seen = _seen_map(config_dir, project_name)
+    ap = _autopilot(config_dir, project_name, now)
+    feed = _feed(records, seen, ap.get("_processed"), now)
+    ap.pop("_processed", None)               # internal only — never to the browser
+    ttn = gather_activity(cfg, project_name, config_dir, now)
+    return {
+        "feed": feed,
+        "attention": _attention(records, proj_path, now),
+        "autopilot": ap,
+        "metrics": _metrics(records, ttn, now),
+    }
+
+
 # ─────────────────────────── CLI (debug / status.sh) ───────────────────────
 if __name__ == "__main__":
     import sys
@@ -358,5 +586,6 @@ if __name__ == "__main__":
         blob["folder"] = gather_folder_status(cfg, project)
         blob["threads"] = gather_threads(cfg, project)
         blob["activity"] = gather_activity(cfg, project, config_dir)
+        blob["activity_full"] = gather_activity_full(cfg, project, config_dir)
     blob["pending"] = gather_pending(cfg)
     print(json.dumps(blob, indent=2, ensure_ascii=False))

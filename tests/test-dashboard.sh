@@ -63,6 +63,15 @@ BADBODY=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "Content-Type: applicat
   -d '{"device_id":"not-a-valid-id"}' "$B/api/accept-pairing")
 t_contains "malformed-id error names the format" "invalid device id format" "$BADBODY"
 
+# /api/activity (v0.25): full payload, token-gated, key never leaked
+t_eq "activity WITHOUT token → 403" "403" "$(code "$B/api/activity?project=testproj")"
+ACT=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/activity?project=testproj")
+t_contains "activity returns a feed" '"feed"' "$ACT"
+t_contains "activity returns attention" '"attention"' "$ACT"
+t_contains "activity returns autopilot" '"autopilot"' "$ACT"
+t_contains "activity returns metrics" '"metrics"' "$ACT"
+case "$ACT" in *test-key*|*_processed*) t_fail "activity leaked api key or internal field" ;; *) t_pass "activity payload clean (no key, no _processed)" ;; esac
+
 # unknown path → 404 (with token)
 t_eq "unknown path → 404" "404" "$(code -H "X-CSDash-Token: $TOKEN" "$B/api/nope")"
 

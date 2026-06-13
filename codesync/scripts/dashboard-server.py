@@ -113,8 +113,11 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"project": project,
                         "threads": state.gather_threads(cfg, project)})
         elif u.path == "/api/activity":
+            # v0.25: full activity payload (feed + attention + autopilot +
+            # metrics). All filesystem-derived, so it returns even when
+            # Syncthing is offline.
             self._json({"project": project,
-                        "activity": state.gather_activity(cfg, project, _ctx["config_dir"])})
+                        **state.gather_activity_full(cfg, project, _ctx["config_dir"])})
         else:
             self._send(404, "404 not found\n", "text/plain; charset=utf-8")
 
