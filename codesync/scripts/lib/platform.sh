@@ -81,6 +81,22 @@ if [ -z "$PY_BIN" ] && [ "$CODESYNC_OS" = "windows" ] \
 fi
 export PY_BIN
 
+# ── Bash to hand to native code (the dashboard server) ───────────────────────
+# The Python server shells out to .sh scripts. On Windows, the SYSTEM PATH's
+# "bash" is C:\Windows\System32\bash.exe — the WSL launcher, which has no distro
+# and exits 1 with a UTF-16 error — so a native process that PATH-resolves "bash"
+# never reaches Git Bash. Resolve THIS (Git) bash here and export it so the
+# server uses it explicitly. Deliberate exception to the "env carries names, not
+# paths" rule: Python needs the path, so we hand it over in NATIVE Windows form
+# (forward-slash via cygpath -m) that Python/CreateProcess uses directly.
+if [ -z "${CODESYNC_BASH:-}" ]; then
+  CODESYNC_BASH="$(command -v bash 2>/dev/null || echo bash)"
+  if [ "$CODESYNC_OS" = "windows" ] && command -v cygpath >/dev/null 2>&1; then
+    CODESYNC_BASH="$(cygpath -m "$CODESYNC_BASH" 2>/dev/null || echo "$CODESYNC_BASH")"
+  fi
+fi
+export CODESYNC_BASH
+
 # Portable Python invocation — PY_BIN may be two words ("py -3"), so callers
 # use this function instead of "$PY_BIN" directly when they want safety.
 # (Scripts that interpolate "$PY_BIN" unquoted also work for the two-word

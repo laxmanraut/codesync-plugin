@@ -45,8 +45,18 @@ except Exception:
     pass
 
 INDEX_PATH = os.path.join(SCRIPT_DIR, "dashboard", "index.html")
-PAIR_PEER = os.path.join(SCRIPT_DIR, "pair-peer.sh")
-LAUNCH_AGENT = os.path.join(SCRIPT_DIR, "launch-agent.sh")
+# Scripts shelled out to bash use FORWARD slashes: on Windows os.path.join yields
+# a backslash path (C:\...\x.sh), and bash treats "\" as an escape, so it fails to
+# open the script (exit 127, no output). Forward slashes (C:/.../x.sh) open fine
+# under Git Bash; on macOS this replace is a no-op. INDEX_PATH stays as-is — it is
+# opened by Python's open(), where backslashes are fine.
+PAIR_PEER = os.path.join(SCRIPT_DIR, "pair-peer.sh").replace("\\", "/")
+LAUNCH_AGENT = os.path.join(SCRIPT_DIR, "launch-agent.sh").replace("\\", "/")
+
+# The bash to shell out to. On Windows, PATH-resolved "bash" is the WSL launcher
+# (C:\Windows\System32\bash.exe) which has no distro and fails; platform.sh
+# exports CODESYNC_BASH = the Git Bash that launched us, in native form.
+_BASH = os.environ.get("CODESYNC_BASH") or "bash"
 
 # Shared mutable launch state (set in main, read by the handler + watchdog).
 # config_dir is the config.json directory — the seen-logs and dashboard.json
@@ -131,8 +141,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _run_bash(self, argv, timeout=30):
         """Run bash with argv (paths cross as argv, never env — the MSYS rule).
+        Uses _BASH (Git Bash), never PATH-resolved "bash" (WSL on Windows).
         Returns (ok, stdout, stderr); raises TimeoutExpired for the caller."""
-        proc = subprocess.run(["bash", *argv], capture_output=True, text=True,
+        proc = subprocess.run([_BASH, *argv], capture_output=True, text=True,
                               timeout=timeout, env={**os.environ})
         return proc.returncode == 0, proc.stdout.strip(), proc.stderr.strip()
 
