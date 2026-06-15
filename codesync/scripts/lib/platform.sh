@@ -193,4 +193,77 @@ codesync_open_url() {
   return 0
 }
 
+# ── Launch an agent terminal (role + project) ────────────────────────────────
+# codesync_launch_terminal PROJECT ROLE PROJECT_PATH
+# Open a new terminal running `claude` with CODESYNC_PROJECT/ROLE set and cwd in
+# the project. The launched command is FIXED (`claude`); the project + role come
+# from the caller's allowlist, never from a request body.
+#
+# Security (launch-agents eng-review 1A + T3): the project PATH and env VALUES
+# are never interpolated into the osascript / terminal-spawn string. We write a
+# chmod-600 temp launcher whose values are %q-quoted and whose FIRST line deletes
+# the file, then exec claude. So the spawn API only ever sees our own mktemp
+# path — a path with a space, quote, or $(...) cannot reach a shell/AppleScript
+# parser. The self-delete-first line means no secret-bearing temp file lingers
+# and there is no disposal race.
+#
+# Prints exactly one line:
+#   LAUNCHED                 a terminal was spawned
+#   COPY<TAB><command>       no auto-launch path here; caller shows a copy button
+# Test hook: with CODESYNC_TEST_LAUNCH_LOG set, write the would-run launcher
+# (macos/windows) or the COPY line (other) to that file and return WITHOUT
+# spawning. The visible GUI window is the only part that can't be unit-tested;
+# the constructed launcher is asserted via this hook on macOS AND Windows.
+codesync_launch_terminal() {
+  __clt_project="$1"; __clt_role="$2"; __clt_path="$3"
+
+  # Launcher body, values %q-quoted. `rm -f -- "$0"` first so the temp file
+  # never lingers; `exec claude` replaces the shell so the window holds the
+  # session. Generated entirely by us — the only place the path appears.
+  __clt_script=$(printf '#!/usr/bin/env bash\nrm -f -- "$0"\ncd %q || exit 1\nexport CODESYNC_PROJECT=%q\nexport CODESYNC_ROLE=%q\nexec claude\n' \
+                 "$__clt_path" "$__clt_project" "$__clt_role")
+  # Universal fallback command (shell-quoted) for when we can't auto-launch.
+  __clt_copy=$(printf 'cd %q && export CODESYNC_PROJECT=%q CODESYNC_ROLE=%q && claude' \
+               "$__clt_path" "$__clt_project" "$__clt_role")
+
+  if [ -n "${CODESYNC_TEST_LAUNCH_LOG:-}" ]; then
+    case "$CODESYNC_OS" in
+      macos|windows) printf '%s' "$__clt_script" > "$CODESYNC_TEST_LAUNCH_LOG" 2>/dev/null || true ;;
+      *)             printf 'COPY\t%s\n' "$__clt_copy" > "$CODESYNC_TEST_LAUNCH_LOG" 2>/dev/null || true ;;
+    esac
+    return 0
+  fi
+
+  case "$CODESYNC_OS" in
+    macos)
+      __clt_tmp=$(mktemp "${TMPDIR:-/tmp}/codesync-launch.XXXXXX") || { printf 'COPY\t%s\n' "$__clt_copy"; return 0; }
+      printf '%s' "$__clt_script" > "$__clt_tmp"
+      chmod 600 "$__clt_tmp"
+      # osascript only ever sees our mktemp path (safe chars), never the project path.
+      osascript -e "tell application \"Terminal\" to do script \"bash '$__clt_tmp'\"" \
+                -e 'tell application "Terminal" to activate' >/dev/null 2>&1 &
+      printf 'LAUNCHED\n'
+      ;;
+    windows)
+      __clt_tmp=$(mktemp "${TMPDIR:-/tmp}/codesync-launch.XXXXXX") || { printf 'COPY\t%s\n' "$__clt_copy"; return 0; }
+      printf '%s' "$__clt_script" > "$__clt_tmp"
+      # No chmod on Windows; the per-user %TEMP% ACL protects the file. Run the
+      # launcher via the current bash.exe so the env exports take effect; prefer
+      # Windows Terminal, else `start` (title arg first so it doesn't eat the program).
+      __clt_bash_win="$(cygpath -w "$(command -v bash)" 2>/dev/null || echo bash.exe)"
+      __clt_tmp_win="$(cygpath -m "$__clt_tmp" 2>/dev/null || echo "$__clt_tmp")"
+      if command -v wt >/dev/null 2>&1; then
+        wt "$__clt_bash_win" "$__clt_tmp_win" >/dev/null 2>&1 &
+      else
+        cmd //c start "codesync" "$__clt_bash_win" "$__clt_tmp_win" >/dev/null 2>&1 &
+      fi
+      printf 'LAUNCHED\n'
+      ;;
+    *)
+      printf 'COPY\t%s\n' "$__clt_copy"
+      ;;
+  esac
+  return 0
+}
+
 fi # CODESYNC_PLATFORM_LOADED
