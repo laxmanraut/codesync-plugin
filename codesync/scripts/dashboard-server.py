@@ -46,6 +46,7 @@ except Exception:
 
 INDEX_PATH = os.path.join(SCRIPT_DIR, "dashboard", "index.html")
 PAIR_PEER = os.path.join(SCRIPT_DIR, "pair-peer.sh")
+LAUNCH_AGENT = os.path.join(SCRIPT_DIR, "launch-agent.sh")
 
 # Shared mutable launch state (set in main, read by the handler + watchdog).
 # config_dir is the config.json directory — the seen-logs and dashboard.json
@@ -87,6 +88,54 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, obj, code=200):
         self._send(code, json.dumps(obj, ensure_ascii=False), )
 
+    # ── shared POST helpers (eng-review CQ: factor read/validate/run; T2: a
+    #    stronger gate for writes than reads get) ────────────────────────────
+    def _post_gate(self):
+        """Gate for write/spawn POSTs. Stricter than the read gate (eng-review
+        T2, because these endpoints now spawn processes + write a synced folder):
+        token in the HEADER only (never ?t=, so it can't leak via URL/history/
+        Referer), Host must be loopback (anti DNS-rebind), Origin absent or self
+        (anti cross-site POST). Sends 403 and returns False on any failure."""
+        supplied = self.headers.get("X-CSDash-Token", "")
+        if not (_ctx["token"] and secrets.compare_digest(supplied, _ctx["token"])):
+            self._send(403, "403 forbidden: missing or invalid token\n",
+                       "text/plain; charset=utf-8")
+            return False
+        host = (self.headers.get("Host", "") or "").rsplit(":", 1)[0]
+        if host not in ("127.0.0.1", "localhost"):
+            self._send(403, "403 forbidden: bad host\n", "text/plain; charset=utf-8")
+            return False
+        origin = self.headers.get("Origin", "")
+        if origin and (urlparse(origin).hostname or "") not in ("127.0.0.1", "localhost"):
+            self._send(403, "403 forbidden: cross-origin\n", "text/plain; charset=utf-8")
+            return False
+        return True
+
+    def _read_json_body(self):
+        """Read + parse the JSON body; send 400 and return None on error."""
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw = self.rfile.read(length) if length else b""
+            return json.loads(raw or b"{}")
+        except Exception:
+            self._json({"ok": False, "error": "bad request body"}, 400)
+            return None
+
+    def _require(self, body, field, regex):
+        """Validated field accessor; send 400 and return None on mismatch."""
+        val = str(body.get(field, "")).strip()
+        if not regex.match(val):
+            self._json({"ok": False, "error": f"invalid {field}"}, 400)
+            return None
+        return val
+
+    def _run_bash(self, argv, timeout=30):
+        """Run bash with argv (paths cross as argv, never env — the MSYS rule).
+        Returns (ok, stdout, stderr); raises TimeoutExpired for the caller."""
+        proc = subprocess.run(["bash", *argv], capture_output=True, text=True,
+                              timeout=timeout, env={**os.environ})
+        return proc.returncode == 0, proc.stdout.strip(), proc.stderr.strip()
+
     # ── GET ───────────────────────────────────────────────────────────────────
     def do_GET(self):
         u = urlparse(self.path)
@@ -121,49 +170,93 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, "404 not found\n", "text/plain; charset=utf-8")
 
-    # ── POST (the one write action) ───────────────────────────────────────────
+    # ── POST (write / spawn actions) ────────────────────────────────────────
     def do_POST(self):
         u = urlparse(self.path)
         qs = parse_qs(u.query)
-        if not self._token_ok(qs):
-            self._send(403, "403 forbidden: missing or invalid token\n",
-                       "text/plain; charset=utf-8")
-            return
-        _touch()
-        if u.path != "/api/accept-pairing":
-            self._send(404, "404 not found\n", "text/plain; charset=utf-8")
-            return
-        try:
-            length = int(self.headers.get("Content-Length", "0") or "0")
-            raw = self.rfile.read(length) if length else b""
-            body = json.loads(raw or b"{}")
+
+        # accept-pairing keeps its shipped gate (token via query OR header) so the
+        # existing pairing button is not broken; it now shares the body/run
+        # helpers (eng-review CQ — factor the duplicated block).
+        if u.path == "/api/accept-pairing":
+            if not self._token_ok(qs):
+                self._send(403, "403 forbidden: missing or invalid token\n",
+                           "text/plain; charset=utf-8")
+                return
+            _touch()
+            body = self._read_json_body()
+            if body is None:
+                return
             device_id = str(body.get("device_id", "")).strip().upper()
-        except Exception:
-            self._json({"ok": False, "error": "bad request body"}, 400)
+            if not state._ID_RE.match(device_id):   # validate BEFORE shelling out
+                self._json({"ok": False, "error": "invalid device id format"}, 400)
+                return
+            try:
+                ok, out, err = self._run_bash([PAIR_PEER, "--peer", device_id, "--device-only"])
+                self._json({
+                    "ok": ok, "device_id": device_id,
+                    "message": (out if ok else err)[-500:],
+                    "pending": state.gather_pending(state.load_config(_ctx["config"])),
+                }, 200 if ok else 500)
+            except subprocess.TimeoutExpired:
+                self._json({"ok": False, "error": "pairing timed out"}, 504)
+            except Exception as e:
+                self._json({"ok": False, "error": f"{type(e).__name__}"}, 500)
             return
-        # Validate ID shape BEFORE shelling out (defense in depth; pair-peer.sh
-        # validates again).
-        if not state._ID_RE.match(device_id):
-            self._json({"ok": False, "error": "invalid device id format"}, 400)
+
+        # launch-agent: spawns a process, so it gets the stronger write gate
+        # (header token + Host + Origin).
+        if u.path == "/api/launch-agent":
+            if not self._post_gate():
+                return
+            _touch()
+            body = self._read_json_body()
+            if body is None:
+                return
+            self._launch_agent(body)
+            return
+
+        self._send(404, "404 not found\n", "text/plain; charset=utf-8")
+
+    def _launch_agent(self, body):
+        """POST /api/launch-agent {project, role} — open a terminal as that role.
+        Allowlist (eng-review): project must exist in config, its path must be on
+        THIS machine (H1 — metadata can sync without the working dir), and the
+        role must be registered. The launched command is FIXED (claude); only the
+        allowlisted project/role/path reach launch-agent.sh, as argv."""
+        cfg = state.load_config(_ctx["config"])
+        project = self._require(body, "project", state._NAME_RE)
+        if project is None:
+            return
+        role = self._require(body, "role", state._NAME_RE)
+        if role is None:
+            return
+        proj = (cfg.get("projects") or {}).get(project)
+        if not proj:
+            self._json({"ok": False, "error": "unknown project"}, 400)
+            return
+        path = proj.get("path", "")
+        if not path or not os.path.isdir(path):
+            self._json({"ok": False, "error": "project not on this machine"}, 409)
+            return
+        if role not in (proj.get("roles") or []):
+            self._json({"ok": False, "error": "role not registered"}, 400)
             return
         try:
-            # Device-trust only — no project-folder invite from the browser.
-            proc = subprocess.run(
-                ["bash", PAIR_PEER, "--peer", device_id, "--device-only"],
-                capture_output=True, text=True, timeout=30,
-                env={**os.environ},
-            )
-            ok = proc.returncode == 0
-            self._json({
-                "ok": ok,
-                "device_id": device_id,
-                "message": (proc.stdout.strip() if ok else proc.stderr.strip())[-500:],
-                "pending": state.gather_pending(state.load_config(_ctx["config"])),
-            }, 200 if ok else 500)
+            ok, out, err = self._run_bash([LAUNCH_AGENT, "--project", project,
+                                           "--role", role, "--path", path])
         except subprocess.TimeoutExpired:
-            self._json({"ok": False, "error": "pairing timed out"}, 504)
+            self._json({"ok": False, "error": "launch timed out"}, 504)
+            return
         except Exception as e:
             self._json({"ok": False, "error": f"{type(e).__name__}"}, 500)
+            return
+        # launch-agent.sh prints LAUNCHED or COPY<TAB><command> (universal fallback).
+        launched = out.startswith("LAUNCHED")
+        copy = out.split("\t", 1)[1] if out.startswith("COPY\t") else ""
+        self._json({"ok": ok, "launched": launched, "copy": copy,
+                    "project": project, "role": role,
+                    "message": (out if ok else err)[-500:]}, 200 if ok else 500)
 
     def _serve_index(self):
         try:

@@ -11,7 +11,7 @@ LOG="$T_TMP/launch.log"
 export CODESYNC_TEST_LAUNCH_LOG="$LOG"
 
 # ── 1. Construction: self-delete first, cd, fixed exports, exec claude ───────
-codesync_launch_terminal testproj qa "$PROJ"
+codesync_launch_terminal testproj qa "$PROJ" >/dev/null
 SCRIPT="$(cat "$LOG")"
 t_contains "launcher self-deletes (rm -f -- \$0)" 'rm -f -- "$0"' "$SCRIPT"
 t_contains "launcher execs the FIXED claude command" "exec claude" "$SCRIPT"
@@ -33,7 +33,7 @@ EVIL_NAME='proj "x" $(touch '"$T_TMP"'/PWNED)'
 EVIL_DIR="$T_TMP/$EVIL_NAME"
 mkdir -p "$EVIL_DIR"
 
-codesync_launch_terminal testproj qa "$EVIL_DIR"     # regenerate launcher for the evil path
+codesync_launch_terminal testproj qa "$EVIL_DIR" >/dev/null   # regenerate launcher for the evil path
 
 # Stub claude on PATH: record cwd + the exported vars, then exit (the launcher
 # `exec claude`s into this). Run a COPY of the launcher so its self-delete
@@ -54,7 +54,7 @@ t_contains "claude ran in the literal evil dir (path treated as data)" 'proj "x"
 t_contains "exported project survived the launcher" "P=testproj" "$RAN"
 
 # ── 3. Copy fallback on an unknown terminal/OS ──────────────────────────────
-CODESYNC_OS=unknown codesync_launch_terminal testproj qa "$PROJ"
+CODESYNC_OS=unknown codesync_launch_terminal testproj qa "$PROJ" >/dev/null
 FALLBACK="$(cat "$LOG")"
 t_contains "unknown OS returns a COPY fallback" "COPY	" "$FALLBACK"
 t_contains "copy command sets the project" "CODESYNC_PROJECT=testproj" "$FALLBACK"

@@ -11,6 +11,11 @@ SERVER="$SCRIPTS/dashboard-server.py"
 STATE="$HOME/.config/codesync/dashboard.json"
 t_thread qa demo "Demo thread"
 
+# Make the launch-agent endpoint hermetic: the server inherits this to the
+# launch-agent.sh subprocess, so codesync_launch_terminal records the would-run
+# launcher here instead of spawning a real terminal.
+export CODESYNC_TEST_LAUNCH_LOG="$HOME/.config/codesync/launch.log"
+
 # Launch detached, short idle timeout so a leaked instance reaps itself fast.
 $PY_BIN "$SERVER" --config "$HOME/.config/codesync/config.json" --idle-timeout 60 \
   >"$HOME/.config/codesync/dash.log" 2>&1 &
@@ -74,6 +79,29 @@ case "$ACT" in *test-key*|*_processed*) t_fail "activity leaked api key or inter
 
 # unknown path → 404 (with token)
 t_eq "unknown path → 404" "404" "$(code -H "X-CSDash-Token: $TOKEN" "$B/api/nope")"
+
+# ── launch-agent (T3/T4): stronger write gate + allowlist ───────────────────
+LB='{"project":"testproj","role":"qa"}'
+J='Content-Type: application/json'
+# header-only token: a query token must NOT authorize a write/spawn endpoint
+t_eq "launch with ?t= but no header → 403" "403" \
+  "$(code -X POST -H "$J" -d "$LB" "$B/api/launch-agent?t=$TOKEN")"
+t_eq "launch without token → 403" "403" \
+  "$(code -X POST -H "$J" -d "$LB" "$B/api/launch-agent")"
+t_eq "launch with bad Host → 403 (anti DNS-rebind)" "403" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H 'Host: evil.example' -H "$J" -d "$LB" "$B/api/launch-agent")"
+t_eq "launch cross-Origin → 403 (anti cross-site POST)" "403" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H 'Origin: http://evil.example' -H "$J" -d "$LB" "$B/api/launch-agent")"
+# valid launch (hermetic): allowlist passes, hook records the launcher
+LR=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d "$LB" "$B/api/launch-agent")
+t_contains "valid launch reports launched" '"launched": true' "$LR"
+t_contains "launch wrote a self-deleting launcher" 'rm -f -- "$0"' \
+  "$(cat "$HOME/.config/codesync/launch.log" 2>/dev/null)"
+# allowlist rejections
+t_eq "launch unknown project → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"nope","role":"qa"}' "$B/api/launch-agent")"
+t_eq "launch unregistered role → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","role":"designer"}' "$B/api/launch-agent")"
 
 cleanup
 rm -f "$STATE"

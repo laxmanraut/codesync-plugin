@@ -36,6 +36,11 @@ API_BASE = "http://127.0.0.1:8384"
 # Strict Syncthing device-ID shape: 8 dash-separated groups of 7 base32 chars.
 _ID_RE = re.compile(r'^[A-Z2-7]{7}(-[A-Z2-7]{7}){7}$')
 
+# Project / role name shape (matches codesync-role-new.md + create-project.sh):
+# lowercase start, then lowercase/digit/dash/underscore. No shell metacharacters,
+# so a validated name is safe to interpolate into a launched command's env.
+_NAME_RE = re.compile(r'^[a-z0-9][a-z0-9_-]*$')
+
 # Thread sort: surface actionable items first (matches session-start.sh).
 _STATUS_PRI = {"todo": 0, "wip": 1, "blocked": 2, "note": 3, "done": 4,
                "(no-fm)": 5, "": 5}

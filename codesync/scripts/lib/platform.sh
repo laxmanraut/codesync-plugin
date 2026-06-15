@@ -227,9 +227,16 @@ codesync_launch_terminal() {
                "$__clt_path" "$__clt_project" "$__clt_role")
 
   if [ -n "${CODESYNC_TEST_LAUNCH_LOG:-}" ]; then
+    # Dump the would-run launcher to the log (for inspection) AND print the same
+    # LAUNCHED / COPY contract to stdout the real path would, so both the unit
+    # test (reads the log) and the endpoint test (reads stdout) are exercised.
     case "$CODESYNC_OS" in
-      macos|windows) printf '%s' "$__clt_script" > "$CODESYNC_TEST_LAUNCH_LOG" 2>/dev/null || true ;;
-      *)             printf 'COPY\t%s\n' "$__clt_copy" > "$CODESYNC_TEST_LAUNCH_LOG" 2>/dev/null || true ;;
+      macos|windows)
+        printf '%s' "$__clt_script" > "$CODESYNC_TEST_LAUNCH_LOG" 2>/dev/null || true
+        printf 'LAUNCHED\n' ;;
+      *)
+        printf 'COPY\t%s\n' "$__clt_copy" > "$CODESYNC_TEST_LAUNCH_LOG" 2>/dev/null || true
+        printf 'COPY\t%s\n' "$__clt_copy" ;;
     esac
     return 0
   fi
