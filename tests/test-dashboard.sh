@@ -68,6 +68,15 @@ BADBODY=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "Content-Type: applicat
   -d '{"device_id":"not-a-valid-id"}' "$B/api/accept-pairing")
 t_contains "malformed-id error names the format" "invalid device id format" "$BADBODY"
 
+# accept-pairing now uses the strong write gate (header-only token + Host + Origin),
+# same as launch-agent. The shipped frontend already sends the token as a header.
+t_eq "accept with ?t= but no header → 403" "403" \
+  "$(code -X POST -H 'Content-Type: application/json' -d '{"device_id":"x"}' "$B/api/accept-pairing?t=$TOKEN")"
+t_eq "accept with bad Host → 403" "403" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H 'Host: evil.example' -H 'Content-Type: application/json' -d '{"device_id":"x"}' "$B/api/accept-pairing")"
+t_eq "accept cross-Origin → 403" "403" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H 'Origin: http://evil.example' -H 'Content-Type: application/json' -d '{"device_id":"x"}' "$B/api/accept-pairing")"
+
 # /api/activity (v0.25): full payload, token-gated, key never leaked
 t_eq "activity WITHOUT token → 403" "403" "$(code "$B/api/activity?project=testproj")"
 ACT=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/activity?project=testproj")

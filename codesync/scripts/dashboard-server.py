@@ -184,15 +184,14 @@ class Handler(BaseHTTPRequestHandler):
     # ── POST (write / spawn actions) ────────────────────────────────────────
     def do_POST(self):
         u = urlparse(self.path)
-        qs = parse_qs(u.query)
 
-        # accept-pairing keeps its shipped gate (token via query OR header) so the
-        # existing pairing button is not broken; it now shares the body/run
-        # helpers (eng-review CQ — factor the duplicated block).
+        # accept-pairing is a write action, so it gets the SAME strong gate as
+        # launch-agent (header-only token + Host + Origin). The shipped frontend
+        # already sends the token as the X-CSDash-Token header (index.html), and a
+        # real browser POST is same-origin loopback, so this does not break the
+        # pairing button. Shares the body/run helpers (eng-review CQ).
         if u.path == "/api/accept-pairing":
-            if not self._token_ok(qs):
-                self._send(403, "403 forbidden: missing or invalid token\n",
-                           "text/plain; charset=utf-8")
+            if not self._post_gate():
                 return
             _touch()
             body = self._read_json_body()
