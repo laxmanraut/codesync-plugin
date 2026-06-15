@@ -4,3 +4,7 @@
 
 # gstack browse-daemon scratch state (never commit)
 .gstack/
+
+# Python bytecode (generated; never commit)
+__pycache__/
+*.pyc

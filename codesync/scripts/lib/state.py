@@ -349,6 +349,108 @@ def calendar_timegm(t):
     return calendar.timegm(t)
 
 
+# ──────────────── first-seen scan (watcher + status-line share) ─────────────
+# The notification contract: a thread addressed to one of THIS machine's roles
+# fires exactly one notification, ever — deduped via the shared, slug-keyed
+# seen-<project>.log. status-line.sh / stop-check.sh do this inline while a
+# Claude session is open. The always-on watcher (watch-inbox.sh) calls the two
+# functions below so the SAME notice happens with NO session open, writing the
+# SAME seen-log — so opening Claude later does not re-notify, and time-to-notice
+# (gather_activity) reflects the watcher's faster notice.
+#
+#   arrival (Syncthing)              find_unseen_threads()        mark_threads_seen()
+#   _inbox/<role>/x.md  ──────────►  rel not in seen-log?  ─yes─►  append rel<TAB>now
+#        (file mtime)                                                      │
+#                                                                          ▼
+#                                            caller fires ONE codesync_notify(count)
+#
+# R1-continuation (deferred, NOT this change): migrate the two hooks onto these
+# too. They are latency-sensitive and golden-tested, so that move gets its own
+# before/after golden diff rather than riding along here.
+
+def _scan_dirs(proj_path, registered, active_role=None):
+    """Inbox dirs to scan: registered roles, else the active role, else all.
+
+    Mirrors status-line.sh exactly so the watcher notifies for precisely what
+    the statusline would have. Returns absolute dir paths (existence unchecked).
+    """
+    inbox_root = os.path.join(proj_path, "_inbox")
+    if registered:
+        return [os.path.join(inbox_root, r) for r in registered]
+    if active_role:
+        return [os.path.join(inbox_root, active_role)]
+    if not os.path.isdir(inbox_root):
+        return []
+    return [os.path.join(inbox_root, d) for d in sorted(os.listdir(inbox_root))
+            if os.path.isdir(os.path.join(inbox_root, d))]
+
+
+def find_unseen_threads(cfg, project_name, config_dir=None, active_role=None):
+    """Threads in this machine's role inboxes not yet in the seen-log.
+
+    Pure read (no write). Returns dicts {rel, role, title, mtime}, newest first.
+    `rel` is forward-slash POSIX (never a backslash) so the seen-log key space
+    does not fork per platform (v0.22.x lesson). The caller marks them via
+    mark_threads_seen and fires the notification.
+    """
+    proj = (cfg.get("projects") or {}).get(project_name)
+    if not proj:
+        return []
+    proj_path = proj.get("path", "")
+    if not proj_path or not os.path.isdir(proj_path):
+        return []
+    seen = _seen_map(config_dir, project_name)
+    registered = proj.get("roles", []) or []
+    out = []
+    for d in _scan_dirs(proj_path, registered, active_role):
+        if not os.path.isdir(d):
+            continue
+        for fn in os.listdir(d):
+            if not fn.endswith(".md") or fn == "README.md":
+                continue
+            full = os.path.join(d, fn)
+            rel = os.path.relpath(full, proj_path).replace(os.sep, "/")
+            if rel in seen:
+                continue
+            try:
+                mtime = os.path.getmtime(full)
+            except OSError:
+                mtime = 0
+            fm = _frontmatter(full) or {}
+            out.append({"rel": rel, "role": os.path.basename(d),
+                        "title": fm.get("title", "") or fn[:-3], "mtime": mtime})
+    out.sort(key=lambda e: -e["mtime"])
+    return out
+
+
+def mark_threads_seen(config_dir, project_name, rels, now=None):
+    """Append rels to seen-<project>.log as first-seen. Returns the count written.
+
+    The ONE writer in state.py (the gather_* family is read-only — this is the
+    documented exception). Mirrors status-line.sh's inline append: O_APPEND,
+    mode 0600, slug-keyed. A same-instant double-append from two writers is
+    harmless — every reader dedups on the rel key, so duplicate lines collapse.
+    """
+    rels = [r for r in (rels or []) if r]
+    if not rels:
+        return 0
+    if config_dir:
+        path = os.path.join(config_dir, f"seen-{project_name}.log")
+    else:
+        path = os.path.expanduser(f"~/.config/codesync/seen-{project_name}.log")
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                          time.gmtime(now) if now is not None else time.gmtime())
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a") as f:
+            for rel in rels:
+                f.write(f"{rel}\t{stamp}\n")
+    except Exception:
+        return 0
+    return len(rels)
+
+
 # ───────────────────── activity & attention (v0.25 / Tranche 2) ─────────────
 # The dashboard's "what's happening / what needs attention" layer. Everything
 # here is DERIVED from persistent timestamps each call (eng-review decision):
