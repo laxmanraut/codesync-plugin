@@ -557,6 +557,148 @@ def write_role_file(proj_path, role, owns, not_owns):
     return dest
 
 
+# ──────────────── capabilities on the role (control-panel Layer 1) ──────────
+# The `codesync:` frontmatter block carries a role's INTENDED title, tool set,
+# and autonomy mode. It SYNCS, so both machines display the same intent — but
+# it is ADVISORY ONLY. Nothing here grants a tool or enables autonomy: that
+# authority lives in local config (Layers 2/3). A peer editing their synced
+# role file therefore can never widen what runs on your machine. parse_* is for
+# display + seeding UI defaults; it must never feed a value straight to `claude`.
+
+def _split_tool_list(s):
+    """Split a comma list of tool specs, respecting parens so a tool like
+    `Bash(npm test)` (or a hypothetical `Bash(a, b)`) is not torn apart."""
+    out, buf, depth = [], [], 0
+    for ch in s:
+        if ch == "(":
+            depth += 1; buf.append(ch)
+        elif ch == ")":
+            depth = max(0, depth - 1); buf.append(ch)
+        elif ch == "," and depth == 0:
+            tok = "".join(buf).strip()
+            if tok:
+                out.append(tok)
+            buf = []
+        else:
+            buf.append(ch)
+    tok = "".join(buf).strip()
+    if tok:
+        out.append(tok)
+    return out
+
+
+def parse_role_codesync(path):
+    """Best-effort read of the advisory `codesync:` frontmatter block from a
+    role .md. Returns a dict with whichever of title / allowed-tools (list) /
+    autonomy are present. Fails soft to {} on any error or malformed YAML — it
+    NEVER raises into the dashboard. Advisory only (see section header)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return {}
+    if not lines or lines[0].strip() != "---":
+        return {}
+    fm, closed = [], False
+    for ln in lines[1:]:
+        if ln.strip() == "---":
+            closed = True
+            break
+        fm.append(ln)
+    if not closed:                       # no closing fence → malformed
+        return {}
+    # Find the `codesync:` key, then read its more-indented children.
+    i, n = 0, len(fm)
+    while i < n and fm[i].strip() != "codesync:":
+        i += 1
+    if i >= n:
+        return {}
+    i += 1
+    out, cur_list = {}, None
+    while i < n:
+        ln = fm[i]
+        i += 1
+        if ln.strip() == "":
+            continue
+        if len(ln) - len(ln.lstrip()) == 0:  # dedented to top level → block ended
+            break
+        s = ln.strip()
+        if cur_list is not None and s.startswith("- "):
+            out.setdefault(cur_list, []).append(s[2:].strip())
+            continue
+        cur_list = None
+        if ":" not in s:
+            continue
+        key, _, val = s.partition(":")
+        key, val = key.strip(), val.strip()
+        if key == "allowed-tools":
+            if val.startswith("[") and val.endswith("]"):
+                out["allowed-tools"] = _split_tool_list(val[1:-1])
+            elif val == "":
+                out["allowed-tools"] = []     # a block list (- item) follows
+                cur_list = "allowed-tools"
+            else:
+                out["allowed-tools"] = _split_tool_list(val)
+        elif key in ("title", "autonomy"):
+            out[key] = val
+    return out
+
+
+def _strip_frontmatter(text):
+    """Return `text` with a leading `---`…`---` frontmatter block removed
+    (plus one trailing blank line). Malformed/absent frontmatter → text as-is."""
+    lines = text.splitlines()
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                rest = lines[i + 1:]
+                while rest and rest[0].strip() == "":
+                    rest.pop(0)
+                return "\n".join(rest)
+    return text
+
+
+def _clean_tool(t):
+    """Strip characters that would break the inline-list frontmatter (commas,
+    brackets, newlines); KEEP parens/colons/asterisks/slashes — they are valid
+    inside tool specs like Bash(npm test) and write-thread.sh:*."""
+    return re.sub(r"[\[\],\r\n]", "", t).strip()
+
+
+def write_role_codesync(proj_path, role, title=None, allowed_tools=None, autonomy=None):
+    """Atomically write the advisory `codesync:` frontmatter onto _roles/<role>.md,
+    preserving the existing markdown body. Atomic (temp + os.replace) so a
+    half-written role never syncs (launch-agents 2A). Caller validates the role
+    name. Returns the dest path. Advisory only — writing this grants nothing."""
+    roles_dir = os.path.join(proj_path, "_roles")
+    os.makedirs(roles_dir, exist_ok=True)
+    dest = os.path.join(roles_dir, f"{role}.md")
+    try:
+        with open(dest, encoding="utf-8", errors="replace") as f:
+            existing = f.read()
+    except OSError:
+        existing = ""
+    body = _strip_frontmatter(existing).strip("\n")
+    if not body:
+        body = f"# {role}"
+    tools = [_clean_tool(t) for t in (allowed_tools or [])]
+    tools = [t for t in tools if t]
+    mode = autonomy if autonomy in ("notify", "sandboxed") else "notify"
+    fm_block = (
+        "---\n"
+        "codesync:\n"
+        f"  title: {_sanitize(title or role)}\n"
+        f"  allowed-tools: [{', '.join(tools)}]\n"
+        f"  autonomy: {mode}\n"
+        "---\n"
+    )
+    tmp = os.path.join(roles_dir, f".{role}.md.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(fm_block + "\n" + body + "\n")
+    os.replace(tmp, dest)
+    return dest
+
+
 # ──────────────── sync-conflict surfacing (launch-agents T1) ────────────────
 def gather_conflicts(cfg, project_name):
     """Syncthing *.sync-conflict-* files anywhere under the project.

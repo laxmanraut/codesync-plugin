@@ -62,55 +62,26 @@ CONFIG_DIR="$HOME/.config/codesync"
 WATCH_SCRIPT="$SCRIPT_DIR/watch-inbox.sh"
 LOG_FILE="$CONFIG_DIR/watch-$PROJECT.log"
 
-# Test hook: capture what WOULD be registered instead of touching the OS.
-_sched_log() {
-  [ -n "${CODESYNC_TEST_SCHED_LOG:-}" ] || return 1
-  printf '%s\n' "$*" >> "$CODESYNC_TEST_SCHED_LOG" 2>/dev/null || true
-  return 0
-}
+# The scheduled-job artifacts (launchd plist / schtasks command + .cmd launcher)
+# and the CODESYNC_TEST_SCHED_LOG hook now live in platform.sh
+# (codesync_install_scheduled_job / codesync_remove_scheduled_job /
+# _codesync_sched_log) so the autonomy runner can reuse the same path (CQ2).
+# This script supplies the watcher-specific names, interval, and env, and keeps
+# the --status display, which is watcher-specific.
 
 # ── macOS: launchd ───────────────────────────────────────────────────────────
 LABEL="com.codesync.watch.$PROJECT"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 macos_install() {
-  mkdir -p "$HOME/Library/LaunchAgents"
-  cat > "$PLIST" <<PLIST_EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>$LABEL</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/bin/bash</string>
-    <string>$WATCH_SCRIPT</string>
-  </array>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>CODESYNC_PROJECT</key>
-    <string>$PROJECT</string>
-  </dict>
-  <key>StartInterval</key>
-  <integer>$INTERVAL</integer>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>StandardErrorPath</key>
-  <string>$LOG_FILE</string>
-</dict>
-</plist>
-PLIST_EOF
-  if _sched_log "MACOS_LOAD label=$LABEL interval=$INTERVAL plist=$PLIST"; then return 0; fi
-  launchctl unload "$PLIST" 2>/dev/null || true
-  launchctl load "$PLIST"
+  codesync_install_scheduled_job "$LABEL" "$TASK" "$WATCH_SCRIPT" "$INTERVAL" \
+    "$LOG_FILE" "$LAUNCHER" "CODESYNC_PROJECT=$PROJECT"
 }
 
 macos_teardown() {
-  if _sched_log "MACOS_UNLOAD label=$LABEL plist=$PLIST"; then rm -f "$PLIST"; return 0; fi
-  if [ -f "$PLIST" ]; then
-    launchctl unload "$PLIST" 2>/dev/null || true
-    rm -f "$PLIST"
+  local existed=no; [ -f "$PLIST" ] && existed=yes
+  codesync_remove_scheduled_job "$LABEL" "$TASK" "$LAUNCHER"
+  if [ "$existed" = yes ]; then
     log "Unloaded and removed $PLIST"
   else
     log "No watcher installed for '$PROJECT' — nothing to remove."
@@ -135,45 +106,16 @@ TASK="codesync-watch-$PROJECT"
 LAUNCHER="$CONFIG_DIR/watch-$PROJECT.cmd"
 
 windows_install() {
-  # The .cmd carries CODESYNC_PROJECT (schtasks has no env dict) and invokes
-  # Git Bash to run the watcher. Written in native Windows form so cmd.exe and
-  # schtasks understand it.
-  # bash.exe (native Windows path) runs the watcher script directly; the .cmd's
-  # `set` puts CODESYNC_PROJECT in the environment bash.exe inherits (env vars
-  # are NOT MSYS path-translated, and a project NAME needs none — platform.sh
-  # rule). Forward-slash the script path so bash accepts it unambiguously.
-  local bash_win watch_fwd
-  bash_win="$(cygpath -w "$(command -v bash)" 2>/dev/null || echo bash.exe)"
-  watch_fwd="$(cygpath -m "$WATCH_SCRIPT" 2>/dev/null || echo "$WATCH_SCRIPT")"
-  {
-    printf '@echo off\r\n'
-    printf 'set CODESYNC_PROJECT=%s\r\n' "$PROJECT"
-    printf '"%s" "%s"\r\n' "$bash_win" "$watch_fwd"
-  } > "$LAUNCHER"
-
-  # Hidden-window wrapper so the 2-min poll never flashes a console; /IT keeps
-  # the task interactive (logged-on) so toasts display. /sc MINUTE /mo in min.
-  local launcher_win every_min tr
-  launcher_win="$(cygpath -w "$LAUNCHER" 2>/dev/null || echo "$LAUNCHER")"
-  every_min=$(( INTERVAL / 60 )); [ "$every_min" -ge 1 ] || every_min=1
-  tr="powershell -WindowStyle Hidden -NonInteractive -Command \"Start-Process -WindowStyle Hidden -FilePath '$launcher_win'\""
-
-  if _sched_log "WIN_SCHTASKS task=$TASK every_min=$every_min launcher=$launcher_win"; then
-    _sched_log "WIN_LAUNCHER $(tr -d '\r' < "$LAUNCHER" | tr '\n' '|')"
-    return 0
-  fi
-  schtasks //Create //TN "$TASK" //SC MINUTE //MO "$every_min" //IT //F \
-    //TR "$tr" >/dev/null
+  codesync_install_scheduled_job "$LABEL" "$TASK" "$WATCH_SCRIPT" "$INTERVAL" \
+    "$LOG_FILE" "$LAUNCHER" "CODESYNC_PROJECT=$PROJECT"
 }
 
 windows_teardown() {
-  if _sched_log "WIN_DELETE task=$TASK"; then rm -f "$LAUNCHER"; return 0; fi
-  schtasks //Delete //TN "$TASK" //F >/dev/null 2>&1 || log "No watcher task '$TASK' — nothing to remove."
-  rm -f "$LAUNCHER"
+  codesync_remove_scheduled_job "$LABEL" "$TASK" "$LAUNCHER"
 }
 
 windows_status() {
-  if _sched_log "WIN_QUERY task=$TASK"; then return 0; fi
+  if _codesync_sched_log "WIN_QUERY task=$TASK"; then return 0; fi
   if schtasks //Query //TN "$TASK" >/dev/null 2>&1; then
     log "Task:   $TASK (registered, every $(( INTERVAL / 60 )) min)"
   else

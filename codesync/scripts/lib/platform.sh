@@ -324,4 +324,133 @@ LAUNCHER
   return 0
 }
 
+# ── Scheduled jobs (launchd / Task Scheduler) ────────────────────────────────
+# codesync_install_scheduled_job / codesync_remove_scheduled_job register a
+# recurring background job that runs a codesync .sh every N seconds, 24/7,
+# surviving logout→login (launchd RunAtLoad / schtasks). ONE registration
+# path, tested once (test-watch-setup.sh) and reused — by the inbox watcher
+# (watch-setup.sh) today, and by the autonomy runner once Layer 3 ships (CQ2).
+#
+# Install args (positional; documented because there are several):
+#   $1 label      launchd Label             e.g. com.codesync.watch.<project>
+#   $2 task       schtasks task name        e.g. codesync-watch-<project>
+#   $3 script     absolute path to the .sh  e.g. .../watch-inbox.sh
+#   $4 interval   poll seconds (>=1; Windows floors to whole minutes, min 1)
+#   $5 log_file   launchd StandardErrorPath (macOS; Windows ignores it)
+#   $6 launcher   the .cmd path (Windows; macOS ignores it)
+#   $7 env_pairs  newline-separated KEY=VALUE lines baked into the job's env.
+#                 VALUES MUST BE NAMES, never paths (platform.sh env rule: env
+#                 vars are not MSYS path-translated; pass project/role names).
+# Remove args: $1 label  $2 task  $3 launcher.
+#
+# Test hook: with CODESYNC_TEST_SCHED_LOG set, the launchctl/schtasks call is
+# replaced by an append to that file in the same MACOS_LOAD / WIN_SCHTASKS /
+# MACOS_UNLOAD / WIN_DELETE line format the suite asserts on — artifact
+# generation is hermetic; live OS registration is validated manually.
+_codesync_sched_log() {
+  [ -n "${CODESYNC_TEST_SCHED_LOG:-}" ] || return 1
+  printf '%s\n' "$*" >> "$CODESYNC_TEST_SCHED_LOG" 2>/dev/null || true
+  return 0
+}
+
+codesync_install_scheduled_job() {
+  __sj_label="$1"; __sj_task="$2"; __sj_script="$3"; __sj_interval="$4"
+  __sj_log="$5"; __sj_launcher="$6"; __sj_env="$7"
+  case "$CODESYNC_OS" in
+    macos)
+      __sj_plist="$HOME/Library/LaunchAgents/$__sj_label.plist"
+      mkdir -p "$HOME/Library/LaunchAgents"
+      # Build the EnvironmentVariables dict from the KEY=VALUE lines.
+      __sj_envxml=""
+      while IFS='=' read -r __sj_k __sj_v; do
+        [ -n "$__sj_k" ] || continue
+        __sj_envxml="${__sj_envxml}    <key>${__sj_k}</key>
+    <string>${__sj_v}</string>
+"
+      done <<ENVEOF
+$__sj_env
+ENVEOF
+      cat > "$__sj_plist" <<PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$__sj_label</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>$__sj_script</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+$__sj_envxml  </dict>
+  <key>StartInterval</key>
+  <integer>$__sj_interval</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardErrorPath</key>
+  <string>$__sj_log</string>
+</dict>
+</plist>
+PLIST_EOF
+      if _codesync_sched_log "MACOS_LOAD label=$__sj_label interval=$__sj_interval plist=$__sj_plist"; then return 0; fi
+      launchctl unload "$__sj_plist" 2>/dev/null || true
+      launchctl load "$__sj_plist"
+      ;;
+    windows)
+      # The .cmd carries the env (schtasks has no env dict) and invokes Git Bash
+      # to run the script. Written in native Windows form so cmd.exe/schtasks
+      # understand it; env VALUES are names (no MSYS path-translation needed),
+      # the SCRIPT path is forward-slashed so bash accepts it unambiguously.
+      __sj_bash_win="$(cygpath -w "$(command -v bash)" 2>/dev/null || echo bash.exe)"
+      __sj_script_fwd="$(cygpath -m "$__sj_script" 2>/dev/null || echo "$__sj_script")"
+      {
+        printf '@echo off\r\n'
+        while IFS='=' read -r __sj_k __sj_v; do
+          [ -n "$__sj_k" ] || continue
+          printf 'set %s=%s\r\n' "$__sj_k" "$__sj_v"
+        done <<ENVEOF
+$__sj_env
+ENVEOF
+        printf '"%s" "%s"\r\n' "$__sj_bash_win" "$__sj_script_fwd"
+      } > "$__sj_launcher"
+      # Hidden-window wrapper so the poll never flashes a console; /IT keeps the
+      # task interactive (logged-on) so toasts display. /sc MINUTE /mo in min.
+      __sj_launcher_win="$(cygpath -w "$__sj_launcher" 2>/dev/null || echo "$__sj_launcher")"
+      __sj_every=$(( __sj_interval / 60 )); [ "$__sj_every" -ge 1 ] || __sj_every=1
+      __sj_tr="powershell -WindowStyle Hidden -NonInteractive -Command \"Start-Process -WindowStyle Hidden -FilePath '$__sj_launcher_win'\""
+      if _codesync_sched_log "WIN_SCHTASKS task=$__sj_task every_min=$__sj_every launcher=$__sj_launcher_win"; then
+        _codesync_sched_log "WIN_LAUNCHER $(tr -d '\r' < "$__sj_launcher" | tr '\n' '|')"
+        return 0
+      fi
+      schtasks //Create //TN "$__sj_task" //SC MINUTE //MO "$__sj_every" //IT //F \
+        //TR "$__sj_tr" >/dev/null
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+codesync_remove_scheduled_job() {
+  __sj_label="$1"; __sj_task="$2"; __sj_launcher="$3"
+  case "$CODESYNC_OS" in
+    macos)
+      __sj_plist="$HOME/Library/LaunchAgents/$__sj_label.plist"
+      if _codesync_sched_log "MACOS_UNLOAD label=$__sj_label plist=$__sj_plist"; then rm -f "$__sj_plist"; return 0; fi
+      [ -f "$__sj_plist" ] && launchctl unload "$__sj_plist" 2>/dev/null || true
+      rm -f "$__sj_plist"
+      ;;
+    windows)
+      if _codesync_sched_log "WIN_DELETE task=$__sj_task"; then rm -f "$__sj_launcher"; return 0; fi
+      schtasks //Delete //TN "$__sj_task" //F >/dev/null 2>&1 || true
+      rm -f "$__sj_launcher"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
 fi # CODESYNC_PLATFORM_LOADED
