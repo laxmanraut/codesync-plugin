@@ -159,6 +159,11 @@
           <div id="launch"><div class="empty">…</div></div>
           <div class="warnline">Opens a terminal SESSION on this machine running Claude as the chosen role — it appears under “Live agents” above while running. A new role here is created with name + Owns checks only; for a full conflict review use <span style="font-family:var(--mono)">/codesync-role-new</span>.</div>
         </section>
+        <section class="card span" id="card-reviews" style="display:none">
+          <h2>Autonomy review queue <span class="count" id="c-reviews"></span></h2>
+          <div id="reviews"></div>
+          <div class="warnline">Branches produced by autonomous agents in an isolated clone. <strong>Approve</strong> lands the (rebased) branch in your LOCAL repo only — you still merge + sync it yourself, so nothing reaches a teammate until you do. <strong>Reject</strong> drops it. Entries flagged <em>blocked</em> touch a secret-like file and can’t be approved.</div>
+        </section>
         <section class="card span">
           <h2>Needs attention <span class="count" id="c-attn"></span></h2>
           <div id="attention"><div class="empty">…</div></div>
@@ -381,6 +386,41 @@ function stopSession(pid,btn){
     else { btn.disabled=false; btn.textContent="Stop";
       btn.parentNode.appendChild(el("div",{class:"err",text:body.error||body.message||"stop failed"})); }
   }).catch(()=>{ btn.disabled=false; btn.textContent="Stop"; });
+}
+function renderReviews(list){
+  const card=document.getElementById("card-reviews"), box=document.getElementById("reviews"); clear(box);
+  // Show entries still awaiting a decision (pending) or flagged (blocked).
+  const open=list.filter(r=>r.status==="pending"||r.status==="blocked");
+  document.getElementById("c-reviews").textContent=open.length||"";
+  card.style.display=open.length?"":"none";
+  open.forEach(r=>{
+    const blocked=r.status==="blocked";
+    const stat=el("div",{style:"display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto"});
+    const sub=el("div",{class:"sub",text:(r.role||"")+" · "+(r.diffstat||"")+(blocked?" · ⚠ secrets: "+(r.secrets||[]).join(", "):"")});
+    const row=el("div",{class:"agent"},[
+      el("div",{class:"av",text:initials(r.role||"?")}),
+      el("div",{class:"main"},[el("div",{class:"nm",text:r.summary||r.branch||r.id}),sub]),
+      stat,
+    ]);
+    if(blocked){ stat.appendChild(el("span",{class:"pill",text:"blocked"})); }
+    else {
+      const ap=el("button",{class:"btn",text:"Approve"});
+      ap.addEventListener("click",()=>reviewAction(r.id,"approve",stat,ap));
+      stat.appendChild(ap);
+    }
+    const rj=el("button",{class:"btn",text:"Reject"});
+    rj.addEventListener("click",()=>reviewAction(r.id,"reject",stat,rj));
+    stat.appendChild(rj);
+    box.appendChild(row);
+  });
+}
+function reviewAction(id,action,into,btn){
+  btn.disabled=true; btn.textContent=action==="approve"?"Approving…":"Rejecting…";
+  post("/api/review-action",{project:CURRENT,id:id,action:action}).then(({body})=>{
+    if(body.ok){ into.appendChild(el("div",{class:"sub",text:body.message||"done"})); refresh(); }
+    else { btn.disabled=false; btn.textContent=action==="approve"?"Approve":"Reject";
+      into.appendChild(el("div",{class:"err",text:body.error||body.message||"action failed"})); }
+  }).catch(()=>{ btn.disabled=false; btn.textContent=action==="approve"?"Approve":"Reject"; });
 }
 function renderPending(d){
   const card=document.getElementById("card-pending"), box=document.getElementById("pending"); clear(box);
@@ -635,6 +675,7 @@ function refresh(){
       renderLaunch(CURRENT);   // operator launch/create panel (no fetch; built once per project)
       api("/api/peers"+q).then(renderAgents).catch(()=>{});
       api("/api/sessions"+q).then(d=>renderSessions(d.sessions||[])).catch(()=>{});
+      api("/api/reviews"+q).then(d=>renderReviews(d.reviews||[])).catch(()=>{});
       api("/api/activity"+q).then(renderActivityFull).catch(()=>{});
     }
   }

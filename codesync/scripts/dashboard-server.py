@@ -54,6 +54,7 @@ INDEX_PATH = os.path.join(SCRIPT_DIR, "dashboard", "index.html")
 PAIR_PEER = os.path.join(SCRIPT_DIR, "pair-peer.sh").replace("\\", "/")
 LAUNCH_AGENT = os.path.join(SCRIPT_DIR, "launch-agent.sh").replace("\\", "/")
 REGISTER_ROLE = os.path.join(SCRIPT_DIR, "register-role-in-config.sh").replace("\\", "/")
+AUTONOMY_REVIEW = os.path.join(SCRIPT_DIR, "autonomy-review.sh").replace("\\", "/")
 ROLES_JSON = os.path.join(SCRIPT_DIR, "lib", "roles.json")
 
 # ── Capability presets (control-panel Layer 2) ───────────────────────────────
@@ -209,6 +210,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"categories": []})
         elif u.path == "/api/launch-options":
             self._json(self._launch_options(cfg, project))
+        elif u.path == "/api/reviews":
+            self._json({"project": project,
+                        "reviews": state.gather_reviews(_ctx["config_dir"], project)})
         elif u.path == "/api/threads":
             self._json({"project": project,
                         "threads": state.gather_threads(cfg, project)})
@@ -279,6 +283,17 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return
             self._create_role(body)
+            return
+
+        # review-action: approve/reject an autonomy review entry (two-gate).
+        if u.path == "/api/review-action":
+            if not self._post_gate():
+                return
+            _touch()
+            body = self._read_json_body()
+            if body is None:
+                return
+            self._review_action(body)
             return
 
         # stop-session: kill a launched agent (allowlisted to our own sessions).
@@ -367,6 +382,40 @@ class Handler(BaseHTTPRequestHandler):
                 if key:
                     seeded[role] = key
         return {"project": project, "presets": presets, "seeded": seeded}
+
+    def _review_action(self, body):
+        """POST /api/review-action {project, id, action: approve|reject}. Allowlist
+        (eng-review): project registered, action in {approve,reject}, and id must
+        resolve to a real review entry (state.review_path blocks traversal). The
+        git work (and the two-gate guarantee) lives in autonomy-review.sh."""
+        cfg = state.load_config(_ctx["config"])
+        project = self._require(body, "project", state._NAME_RE)
+        if project is None:
+            return
+        rid = self._require(body, "id", state._NAME_RE)
+        if rid is None:
+            return
+        action = body.get("action")
+        if action not in ("approve", "reject"):
+            self._json({"ok": False, "error": "action must be approve or reject"}, 400)
+            return
+        if not (cfg.get("projects") or {}).get(project):
+            self._json({"ok": False, "error": "unknown project"}, 400)
+            return
+        if state.review_path(_ctx["config_dir"], project, rid) is None:
+            self._json({"ok": False, "error": "unknown review id"}, 404)
+            return
+        try:
+            ok, out, err = self._run_bash([AUTONOMY_REVIEW, "--project", project,
+                                           "--id", rid, "--action", action])
+        except subprocess.TimeoutExpired:
+            self._json({"ok": False, "error": "review action timed out"}, 504)
+            return
+        except Exception as e:
+            self._json({"ok": False, "error": f"{type(e).__name__}"}, 500)
+            return
+        self._json({"ok": ok, "action": action, "id": rid,
+                    "message": (out if ok else (err or out))[-500:]}, 200 if ok else 500)
 
     def _create_role(self, body):
         """POST /api/create-role {project, role, owns[], not_owns[], confirm?}.

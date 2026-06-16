@@ -815,6 +815,103 @@ def resolve_autonomy_role(config_dir, project, role):
     }
 
 
+# ──────────── autonomy review queue + two-gate approve (Layer 3 T7/T8) ───────
+# The runner files a pending entry per produced branch; a human approves (gate 1:
+# land the rebased branch in the LOCAL repo) and later merges+syncs (gate 2:
+# reaches the peer). codesync never writes the synced folder / live tree itself.
+
+# Files that must never be auto-merged (T8 secret denylist). An entry whose diff
+# touches one is marked 'blocked' and approve refuses it.
+_SECRET_DENY_NAMES = {"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "credentials"}
+_SECRET_DENY_EXTS = (".pem", ".key", ".p12", ".pfx", ".keystore", ".jks")
+
+
+def secret_denylist_hits(paths):
+    """Paths that look like secrets (must not be auto-merged). Matches common
+    secret filenames/extensions and any .env* file."""
+    hits = []
+    for p in paths:
+        base = os.path.basename(p).lower()
+        if (base in _SECRET_DENY_NAMES or base.startswith(".env")
+                or any(base.endswith(e) for e in _SECRET_DENY_EXTS)):
+            hits.append(p)
+    return hits
+
+
+def _review_dir(config_dir, project):
+    return os.path.join(config_dir, "autonomy-review", project)
+
+
+def gather_reviews(config_dir, project):
+    """All review-queue entries for a project, newest first. Pure read; skips
+    unreadable files. The Syncthing API key is never part of these entries."""
+    d = _review_dir(config_dir, project)
+    out = []
+    if not os.path.isdir(d):
+        return out
+    for fn in sorted(os.listdir(d)):
+        if not fn.endswith(".json") or fn.endswith(".tmp"):
+            continue
+        try:
+            with open(os.path.join(d, fn), encoding="utf-8") as f:
+                out.append(json.load(f))
+        except (OSError, ValueError):
+            continue
+    out.sort(key=lambda e: e.get("created", ""), reverse=True)
+    return out
+
+
+def review_path(config_dir, project, review_id):
+    """Path to a review entry, or None for a malformed id (blocks traversal —
+    ids are role+timestamp, which match _NAME_RE: no '/' or '..')."""
+    if not isinstance(review_id, str) or not _NAME_RE.match(review_id):
+        return None
+    p = os.path.join(_review_dir(config_dir, project), review_id + ".json")
+    return p if os.path.isfile(p) else None
+
+
+def load_review(config_dir, project, review_id):
+    p = review_path(config_dir, project, review_id)
+    if not p:
+        return None
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def set_review_status(config_dir, project, review_id, status):
+    """Atomically update an entry's status. Returns True on success."""
+    e = load_review(config_dir, project, review_id)
+    if e is None:
+        return False
+    e["status"] = status
+    p = os.path.join(_review_dir(config_dir, project), review_id + ".json")
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(e, f, indent=2)
+    os.replace(tmp, p)
+    return True
+
+
+def expire_reviews(config_dir, project, ttl_hours=72, now=None):
+    """Mark pending entries older than ttl_hours as 'expired'; return a list of
+    (id, branch, clone_dir) so the caller can GC the branches (T8). now=epoch
+    for tests."""
+    if now is None:
+        now = calendar_timegm(time.gmtime())
+    out = []
+    for e in gather_reviews(config_dir, project):
+        if e.get("status") != "pending":
+            continue
+        ts = _iso_to_epoch(e.get("created", ""))
+        if ts and now - ts > ttl_hours * 3600:
+            if set_review_status(config_dir, project, e.get("id", ""), "expired"):
+                out.append((e.get("id", ""), e.get("branch", ""), e.get("clone_dir", "")))
+    return out
+
+
 # ──────────────── sync-conflict surfacing (launch-agents T1) ────────────────
 def gather_conflicts(cfg, project_name):
     """Syncthing *.sync-conflict-* files anywhere under the project.

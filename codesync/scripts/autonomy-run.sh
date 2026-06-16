@@ -57,6 +57,24 @@ p=json.load(open(sys.argv[1]))["projects"].get(sys.argv[2],{})
 print(p.get("path",""))' "$CFG_FILE" "$PROJECT")
 [ -n "$PROJ_PATH" ] && [ -d "$PROJ_PATH" ] || exit 0
 
+# ── T8: expire stale pending reviews + GC their branches (every cycle, cheap) ──
+TTL_HOURS="${CODESYNC_AUTONOMY_REVIEW_TTL_HOURS:-72}"
+EXPIRED=$(codesync_python - "$LIB" "$CONFIG_DIR" "$PROJECT" "$TTL_HOURS" <<'PY'
+import sys
+lib, cd, proj, ttl = sys.argv[1:5]
+sys.path.insert(0, lib)
+import state
+for rid, branch, clone in state.expire_reviews(cd, proj, ttl_hours=int(ttl)):
+    print(f"{branch}\t{clone}")
+PY
+)
+if [ -n "$EXPIRED" ]; then
+  printf '%s\n' "$EXPIRED" | while IFS="$(printf '\t')" read -r br cl; do
+    [ -n "$br" ] && [ -n "$cl" ] && codesync_autonomy_gc_branch "$cl" "$br" \
+      && logln "GC expired branch $br"
+  done
+fi
+
 # Enabled roles (LOCAL authority).
 ENABLED_ROLES=$(codesync_python - "$LIB" "$CONFIG_DIR" "$PROJECT" <<'PY'
 import sys
@@ -251,23 +269,33 @@ PY
   # ── file a review-queue entry when the branch advanced (L3-T7 reads these) ──
   if [ "$__changed" = yes ]; then
     __diffstat=$(git -C "$__clone" diff --stat "$__base" "$__head" 2>/dev/null | tail -1)
+    __files=$(git -C "$__clone" diff --name-only "$__base" "$__head" 2>/dev/null)
     mkdir -p "$REVIEW_DIR"
-    codesync_python - "$REVIEW_DIR" "$PROJECT" "$__role" "$__branch" "$__clone" "$__base" "$__head" "$__diffstat" "$__summary" <<'PY'
+    # T8 secret denylist: if the diff touches a secret-looking file, file the
+    # entry as 'blocked' (approve refuses it) instead of 'pending'.
+    __entry_out=$(printf '%s' "$__files" | codesync_python - "$LIB" "$REVIEW_DIR" "$PROJECT" "$__role" "$__branch" "$__basebr" "$__clone" "$__base" "$__head" "$__diffstat" "$__summary" <<'PY'
 import json, os, sys, time
-review_dir, proj, role, branch, clone, base, head, diffstat, summary = sys.argv[1:10]
+lib, review_dir, proj, role, branch, basebr, clone, base, head, diffstat, summary = sys.argv[1:12]
+sys.path.insert(0, lib)
+import state
+files = [l.strip() for l in sys.stdin.read().splitlines() if l.strip()]
+secrets = state.secret_denylist_hits(files)
 entry = {
     "id": f"{role}-{time.strftime('%Y%m%d-%H%M%S', time.gmtime())}",
-    "project": proj, "role": role, "branch": branch, "clone_dir": clone,
-    "base": base, "head": head, "diffstat": diffstat, "summary": summary,
-    "status": "pending", "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "project": proj, "role": role, "branch": branch, "base_branch": basebr,
+    "clone_dir": clone, "base": base, "head": head, "diffstat": diffstat,
+    "summary": summary, "secrets": secrets,
+    "status": "blocked" if secrets else "pending",
+    "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
 }
 dest = os.path.join(review_dir, entry["id"] + ".json")
 tmp = dest + ".tmp"
 json.dump(entry, open(tmp, "w"), indent=2)
 os.replace(tmp, dest)
-print(dest)
+print(entry["status"])
 PY
-    logln "REVIEW filed role=$__role branch=$__branch tokens=$__tokens — $__summary"
+)
+    logln "REVIEW filed role=$__role branch=$__branch status=$__entry_out tokens=$__tokens — $__summary"
   else
     logln "DONE role=$__role no changes (exit $__exit, tokens=$__tokens) — $__summary"
   fi

@@ -224,6 +224,20 @@ t_eq "roles catalog WITHOUT token → 403" "403" "$(code "$B/api/roles")"
 RC=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/roles")
 t_contains "roles catalog serves predefined roles" "backend" "$RC"
 
+# ── autonomy review queue (Layer 3 T7): read gated; action gated + allowlisted ─
+t_eq "reviews WITHOUT token → 403" "403" "$(code "$B/api/reviews?project=testproj")"
+RVQ=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/reviews?project=testproj")
+t_contains "reviews endpoint returns a list" '"reviews"' "$RVQ"
+RAB='{"project":"testproj","id":"backend-20260101-000000","action":"approve"}'
+t_eq "review-action with ?t= but no header → 403" "403" \
+  "$(code -X POST -H "$J" -d "$RAB" "$B/api/review-action?t=$TOKEN")"
+t_eq "review-action cross-Origin → 403" "403" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H 'Origin: http://evil.example' -H "$J" -d "$RAB" "$B/api/review-action")"
+t_eq "review-action bad action → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","id":"x","action":"nuke"}' "$B/api/review-action")"
+t_eq "review-action unknown id → 404" "404" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","id":"ghost-20260101-000000","action":"reject"}' "$B/api/review-action")"
+
 cleanup
 rm -f "$STATE"
 t_done

@@ -45,3 +45,42 @@ codesync_autonomy_hooks_disabled() {
   [ -z "$(ls -A "$__ahd_hp" 2>/dev/null)" ] || return 1
   return 0
 }
+
+# ── review two-gate approve / reject / GC (Layer 3 T7/T8) ────────────────────
+# codesync_autonomy_approve CLONE BRANCH [BASE_BRANCH]
+# GATE 1: rebase BRANCH onto the current base, then push it into the LOCAL
+# origin repo (= repo_path) as a branch ref. Never checks out / writes origin's
+# working tree, never pushes to a network remote, never reaches a peer — the
+# human merges + syncs that branch themselves (GATE 2). Returns 0 ok / 2 conflict
+# / 1 other failure.
+codesync_autonomy_approve() {
+  __aa_clone="$1"; __aa_branch="$2"; __aa_base="${3:-}"
+  command -v git >/dev/null 2>&1 || return 1
+  git -C "$__aa_clone" fetch --quiet origin 2>/dev/null || true
+  if [ -n "$__aa_base" ] && git -C "$__aa_clone" rev-parse --verify --quiet "origin/$__aa_base" >/dev/null 2>&1; then
+    if ! git -C "$__aa_clone" rebase --quiet "origin/$__aa_base" "$__aa_branch" 2>/dev/null; then
+      git -C "$__aa_clone" rebase --abort 2>/dev/null || true
+      echo "approve: rebase conflict against current base — resolve manually" >&2
+      return 2
+    fi
+  fi
+  # Push the branch into the local origin (repo_path). We only ever push a
+  # codesync/auto/* ref, never origin's checked-out branch, so a non-bare origin
+  # accepts it without denyCurrentBranch trouble.
+  git -C "$__aa_clone" push --quiet origin "$__aa_branch:$__aa_branch" 2>/dev/null \
+    || { echo "approve: could not land the branch in the local repo" >&2; return 1; }
+  return 0
+}
+
+# codesync_autonomy_reject CLONE BRANCH — drop the branch in the clone.
+codesync_autonomy_reject() { codesync_autonomy_gc_branch "$1" "$2"; }
+
+# codesync_autonomy_gc_branch CLONE BRANCH — delete a branch in the clone
+# (detach first so a checked-out branch can be removed). Idempotent.
+codesync_autonomy_gc_branch() {
+  __gc_clone="$1"; __gc_branch="$2"
+  git -C "$__gc_clone" rev-parse --git-dir >/dev/null 2>&1 || return 0
+  git -C "$__gc_clone" checkout -q --detach 2>/dev/null || true
+  git -C "$__gc_clone" branch -D "$__gc_branch" 2>/dev/null || true
+  return 0
+}
