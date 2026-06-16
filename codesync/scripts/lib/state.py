@@ -699,6 +699,122 @@ def write_role_codesync(proj_path, role, title=None, allowed_tools=None, autonom
     return dest
 
 
+# ──────────── autonomy: LOCAL authority for sandboxed agents (Layer 3) ───────
+# autonomy.json is per-machine and NEVER synced. It is the ONLY source of
+# authority for whether a role runs autonomously and what tools it gets — the
+# synced role file is advisory (A5 reversed). A peer cannot enable autonomy or
+# widen tools on your machine, because nothing here is read from synced content.
+
+def _autonomy_path(config_dir):
+    return os.path.join(config_dir, "autonomy.json")
+
+
+def load_autonomy(config_dir):
+    """Load autonomy.json (local, never synced). Fail soft to an empty skeleton."""
+    try:
+        with open(_autonomy_path(config_dir), encoding="utf-8") as f:
+            d = json.load(f)
+        if isinstance(d, dict):
+            d.setdefault("projects", {})
+            return d
+    except (OSError, ValueError):
+        pass
+    return {"version": 1, "projects": {}}
+
+
+def _write_autonomy(config_dir, data):
+    os.makedirs(config_dir, exist_ok=True)
+    p = _autonomy_path(config_dir)
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp, p)
+
+
+def is_inside_synced(path, cfg):
+    """True if `path` resolves inside ANY registered project folder. Layer 3
+    refuses a repo_path / clone dir inside a synced project, so agent code or
+    diffs cannot propagate to a peer via Syncthing before human review."""
+    try:
+        rp = os.path.realpath(path)
+    except OSError:
+        return True                      # unresolvable → treat as unsafe (refuse)
+    for proj in (cfg.get("projects") or {}).values():
+        pp = proj.get("path", "")
+        if not pp:
+            continue
+        try:
+            base = os.path.realpath(pp)
+        except OSError:
+            continue
+        if rp == base or rp.startswith(base + os.sep):
+            return True
+    return False
+
+
+def autonomy_clone_dir(config_dir, project, role):
+    """Per-role isolation clone path. Under the LOCAL config dir, so it is
+    outside every synced folder by construction."""
+    return os.path.join(config_dir, "autonomy-clones", project, role)
+
+
+def set_autonomy_repo(config_dir, project, repo_path, cfg):
+    """Set the local repo_path that autonomy clones are made from. Refuses a path
+    that is missing, not a git repo, or inside a synced project. (ok, error)."""
+    if not repo_path:
+        return False, "repo_path required"
+    ap = os.path.abspath(os.path.expanduser(repo_path))
+    if not os.path.isdir(ap):
+        return False, "repo_path does not exist"
+    if not os.path.isdir(os.path.join(ap, ".git")):
+        return False, "repo_path is not a git repository"
+    if is_inside_synced(ap, cfg):
+        return False, "repo_path must be OUTSIDE every synced project folder"
+    data = load_autonomy(config_dir)
+    data["projects"].setdefault(project, {})["repo_path"] = ap
+    _write_autonomy(config_dir, data)
+    return True, ""
+
+
+def set_autonomy_model(config_dir, project, model):
+    """Pin the model the runner passes to claude -p (spike lesson: never rely on
+    the stale settings default). Stored locally per project."""
+    data = load_autonomy(config_dir)
+    data["projects"].setdefault(project, {})["model"] = model
+    _write_autonomy(config_dir, data)
+
+
+def set_autonomy_role(config_dir, project, role, enabled=None, allowed_tools=None):
+    """Enable/disable autonomy for a role and/or set its effective tool string —
+    LOCAL authority. Returns the updated role dict."""
+    data = load_autonomy(config_dir)
+    roles = data["projects"].setdefault(project, {}).setdefault("roles", {})
+    r = roles.setdefault(role, {"enabled": False, "allowed_tools": ""})
+    if enabled is not None:
+        r["enabled"] = bool(enabled)
+    if allowed_tools is not None:
+        r["allowed_tools"] = allowed_tools
+    _write_autonomy(config_dir, data)
+    return r
+
+
+def resolve_autonomy_role(config_dir, project, role):
+    """Effective autonomy settings for a role, or None if not enabled. Reads ONLY
+    local config — never the synced role file."""
+    data = load_autonomy(config_dir)
+    proj = (data.get("projects") or {}).get(project) or {}
+    r = (proj.get("roles") or {}).get(role)
+    if not r or not r.get("enabled"):
+        return None
+    return {
+        "project": project, "role": role,
+        "repo_path": proj.get("repo_path", ""),
+        "model": proj.get("model", ""),
+        "allowed_tools": r.get("allowed_tools", ""),
+        "clone_dir": autonomy_clone_dir(config_dir, project, role),
+    }
+
+
 # ──────────────── sync-conflict surfacing (launch-agents T1) ────────────────
 def gather_conflicts(cfg, project_name):
     """Syncthing *.sync-conflict-* files anywhere under the project.
