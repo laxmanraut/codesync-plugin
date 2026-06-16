@@ -56,6 +56,34 @@ LAUNCH_AGENT = os.path.join(SCRIPT_DIR, "launch-agent.sh").replace("\\", "/")
 REGISTER_ROLE = os.path.join(SCRIPT_DIR, "register-role-in-config.sh").replace("\\", "/")
 ROLES_JSON = os.path.join(SCRIPT_DIR, "lib", "roles.json")
 
+# ── Capability presets (control-panel Layer 2) ───────────────────────────────
+# A capability maps to a FIXED, server-side --allowedTools string. This table is
+# the ONLY authority: a capability not present here is rejected (400), and the
+# string handed to claude comes from HERE — never from the request body or the
+# advisory role file (which only seeds the UI default). Strict subsets, low→high.
+#   reviewer    read-only
+#   editor      reviewer + edit/write
+#   reply-only  the autopilot's exact set (read + post a thread reply)
+# 'runner' (editor + Bash(<project test cmd>)) is intentionally deferred until a
+# per-project test/build command is registered — without that it would need an
+# over-broad Bash grant, so it is NOT in the table and resolves to a 400.
+_CAPABILITY_PRESETS = {
+    "reviewer": "Read,Glob,Grep",
+    "editor": "Read,Glob,Grep,Edit,Write",
+    "reply-only": "Read,Glob,Grep,Bash(write-thread.sh:*)",
+}
+
+
+def _preset_toolset(s):
+    return frozenset(t.strip() for t in s.split(",") if t.strip())
+
+
+# set-of-tools → capability key, for seeding the UI default from a role's
+# advisory declared tools (display only; the server still re-derives authority).
+_CAPABILITY_BY_TOOLSET = {
+    _preset_toolset(v): k for k, v in _CAPABILITY_PRESETS.items()
+}
+
 # The bash to shell out to. On Windows, PATH-resolved "bash" is the WSL launcher
 # (C:\Windows\System32\bash.exe) which has no distro and fails; platform.sh
 # exports CODESYNC_BASH = the Git Bash that launched us, in native form.
@@ -179,6 +207,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(json.load(f))
             except Exception:
                 self._json({"categories": []})
+        elif u.path == "/api/launch-options":
+            self._json(self._launch_options(cfg, project))
         elif u.path == "/api/threads":
             self._json({"project": project,
                         "threads": state.gather_threads(cfg, project)})
@@ -288,9 +318,24 @@ class Handler(BaseHTTPRequestHandler):
         if role not in (proj.get("roles") or []):
             self._json({"ok": False, "error": "role not registered"}, 400)
             return
+        # Optional capability → a FIXED preset --allowedTools string (CQ1). The
+        # capability must be a known preset KEY: membership in _CAPABILITY_PRESETS
+        # IS the allowlist, so an arbitrary tool string (e.g. "Bash(:*)") or a
+        # role-file value can never reach claude. Absent capability = unrestricted
+        # (current behavior, backward compatible). launch-agent.sh / the launcher
+        # then %q-quote the resolved string before it crosses bash→claude.
+        cap = body.get("capability")
+        allowed = ""
+        if cap not in (None, ""):
+            if not isinstance(cap, str) or cap not in _CAPABILITY_PRESETS:
+                self._json({"ok": False, "error": "unknown capability"}, 400)
+                return
+            allowed = _CAPABILITY_PRESETS[cap]
+        argv = [LAUNCH_AGENT, "--project", project, "--role", role, "--path", path]
+        if allowed:
+            argv += ["--allowed-tools", allowed]
         try:
-            ok, out, err = self._run_bash([LAUNCH_AGENT, "--project", project,
-                                           "--role", role, "--path", path])
+            ok, out, err = self._run_bash(argv)
         except subprocess.TimeoutExpired:
             self._json({"ok": False, "error": "launch timed out"}, 504)
             return
@@ -301,8 +346,27 @@ class Handler(BaseHTTPRequestHandler):
         launched = out.startswith("LAUNCHED")
         copy = out.split("\t", 1)[1] if out.startswith("COPY\t") else ""
         self._json({"ok": ok, "launched": launched, "copy": copy,
-                    "project": project, "role": role,
+                    "project": project, "role": role, "capability": cap or "",
                     "message": (out if ok else err)[-500:]}, 200 if ok else 500)
+
+    def _launch_options(self, cfg, project):
+        """GET /api/launch-options — capability presets (for the dropdown) plus,
+        per registered role, the preset its advisory declared tools match (to
+        seed the default). Read-only; the role file is advisory, so this only
+        suggests a default — _launch_agent still re-derives the real authority."""
+        presets = [{"key": k, "tools": v} for k, v in _CAPABILITY_PRESETS.items()]
+        seeded = {}
+        proj = (cfg.get("projects") or {}).get(project) or {}
+        ppath = proj.get("path", "")
+        if ppath and os.path.isdir(ppath):
+            for role in (proj.get("roles") or []):
+                cs = state.parse_role_codesync(
+                    os.path.join(ppath, "_roles", f"{role}.md"))
+                key = _CAPABILITY_BY_TOOLSET.get(
+                    frozenset(cs.get("allowed-tools") or []))
+                if key:
+                    seeded[role] = key
+        return {"project": project, "presets": presets, "seeded": seeded}
 
     def _create_role(self, body):
         """POST /api/create-role {project, role, owns[], not_owns[], confirm?}.

@@ -527,9 +527,9 @@ function post(path,body){
 }
 // All untrusted strings (copy command, overlap tokens, errors) render via el's
 // textContent — never innerHTML — so a peer-chosen role/title can't inject HTML.
-function launchInto(role,into){
+function launchInto(role,into,cap){
   clear(into); into.appendChild(el("span",{class:"sub",text:"launching…"}));
-  post("/api/launch-agent",{project:CURRENT,role:role}).then(({body})=>{
+  post("/api/launch-agent",{project:CURRENT,role:role,capability:cap||""}).then(({body})=>{
     clear(into);
     if(body.launched){ into.appendChild(el("span",{class:"pill on",text:"launched ✓"})); }
     else if(body.copy){
@@ -547,17 +547,29 @@ function renderLaunch(project){
   _launchFor=project;
   const box=document.getElementById("launch"); if(!box) return; clear(box);
   const roles=projRoles(project);
+  const sels={};   // role → its capability <select>, filled from /api/launch-options
   if(roles.length) roles.forEach(r=>{
-    const stat=el("div",{style:"margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"});
+    const stat=el("div",{style:"display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"});
+    // Capability (tool scope). Options + the seeded default come from the server
+    // (the preset table is the single authority); "unrestricted" = launch as today.
+    const sel=el("select",{title:"capability — what tools this agent may use",style:"margin-left:auto;padding:5px 8px;border-radius:8px"});
+    sel.appendChild(el("option",{value:"",text:"unrestricted"}));
+    sels[r]=sel;
     const btn=el("button",{class:"btn",text:"Launch"});
-    btn.addEventListener("click",()=>launchInto(r,stat));
+    btn.addEventListener("click",()=>launchInto(r,stat,sel.value));
     box.appendChild(el("div",{class:"agent"},[
       el("div",{class:"av",text:initials(r)}),
       el("div",{class:"main"},[el("div",{class:"nm",text:r}),el("div",{class:"sub",text:"open a terminal as "+r})]),
-      stat, btn,
+      sel, stat, btn,
     ]));
   });
   else box.appendChild(el("div",{class:"empty",text:"No roles registered here yet — create one below."}));
+  if(roles.length) api("/api/launch-options?project="+encodeURIComponent(project)).then(o=>{
+    (o.presets||[]).forEach(p=>Object.values(sels).forEach(sel=>
+      sel.appendChild(el("option",{value:p.key,text:p.key}))));
+    const seeded=o.seeded||{};
+    Object.keys(seeded).forEach(r=>{ if(sels[r]) sels[r].value=seeded[r]; });
+  }).catch(()=>{});
   const formWrap=el("div",{style:"display:none;margin-top:12px"});
   const toggle=el("button",{class:"disclose",text:"+ New role"});
   toggle.addEventListener("click",()=>{ const open=formWrap.style.display==="none";

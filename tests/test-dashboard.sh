@@ -151,6 +151,45 @@ t_eq "launch unknown project → 400" "400" \
 t_eq "launch unregistered role → 400" "400" \
   "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","role":"designer"}' "$B/api/launch-agent")"
 
+# ── capability presets (control-panel Layer 2): the preset table is authority ──
+LOG="$HOME/.config/codesync/launch.log"
+# GET /api/launch-options is token-gated and lists the fixed presets.
+t_eq "launch-options WITHOUT token → 403" "403" "$(code "$B/api/launch-options?project=testproj")"
+LO=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/launch-options?project=testproj")
+t_contains "launch-options lists the reviewer preset" '"key": "reviewer"' "$LO"
+t_contains "launch-options exposes the preset tool string" "Read,Glob,Grep" "$LO"
+# a valid capability resolves to its FIXED preset string in the launcher
+LRC=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" \
+  -d '{"project":"testproj","role":"qa","capability":"reviewer"}' "$B/api/launch-agent")
+t_contains "capability launch reports launched" '"launched": true' "$LRC"
+# %q escapes commas on some bash builds (Read\,Glob\,Grep) and not others, so
+# strip backslashes before matching the read-only scope; the escaping ITSELF is
+# proven by the reply-only check below (parens/glob escape in every bash).
+CLEAN=$(tr -d '\\' < "$LOG")
+t_contains "reviewer launcher scopes claude to read-only tools" '--allowedTools Read,Glob,Grep' "$CLEAN"
+# reply-only carries shell metacharacters — they must be %q-escaped, not raw
+curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" \
+  -d '{"project":"testproj","role":"qa","capability":"reply-only"}' "$B/api/launch-agent" >/dev/null
+t_assert "reply-only tool spec is %q-escaped in the launcher (parens/glob neutralised)" \
+  grep -Fq -- 'Bash\(write-thread.sh:\*\)' "$LOG"
+# SECURITY REGRESSION #1 — over-privilege refusal: a capability that is not a
+# known preset KEY (here an attempt to grant broad shell) → 400, never launched.
+t_eq "over-privilege capability refused → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" \
+     -d '{"project":"testproj","role":"qa","capability":"Bash(:*)"}' "$B/api/launch-agent")"
+# SECURITY REGRESSION #2 — injection refusal: a raw tool string with shell
+# metacharacters as the capability is rejected (membership in the preset table
+# IS the allowlist), so it can never reach claude verbatim.
+t_eq "injection-y capability string refused → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" \
+     -d '{"project":"testproj","role":"qa","capability":"editor; rm -rf /"}' "$B/api/launch-agent")"
+# the advisory role file only SEEDS the UI default — an editor-matching codesync
+# block makes launch-options seed qa→editor (display only; authority unchanged).
+printf -- '---\ncodesync:\n  title: qa\n  allowed-tools: [Read, Glob, Grep, Edit, Write]\n  autonomy: notify\n---\n# qa\n' > "$PROJ/_roles/qa.md"
+LO2=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/launch-options?project=testproj")
+t_contains "advisory role tools seed the UI default (qa→editor)" '"qa": "editor"' "$LO2"
+rm -f "$PROJ/_roles/qa.md"
+
 # ── create-role (T5/T6): gate + collision + overlap-confirm + atomic write ──
 mkdir -p "$PROJ/_roles"
 printf '# backend\n\n## Owns\n- REST/GraphQL APIs\n\n## Does not own\n- UI\n' > "$PROJ/_roles/backend.md"

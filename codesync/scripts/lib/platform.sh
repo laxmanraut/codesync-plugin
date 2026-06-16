@@ -244,7 +244,17 @@ codesync_open_url() {
 # spawning. The visible GUI window is the only part that can't be unit-tested;
 # the constructed launcher is asserted via this hook on macOS AND Windows.
 codesync_launch_terminal() {
-  __clt_project="$1"; __clt_role="$2"; __clt_path="$3"
+  __clt_project="$1"; __clt_role="$2"; __clt_path="$3"; __clt_tools="${4:-}"
+
+  # Optional capability scope (control-panel Layer 2). The server resolved a
+  # FIXED preset string and validated it; here we ONLY %q-quote it so a tool
+  # spec with shell metacharacters (e.g. Bash(write-thread.sh:*) — parens, ':',
+  # '*') reaches `claude --allowedTools` as a single literal arg and cannot be
+  # reparsed by the shell that runs the launcher. Empty = unrestricted (default).
+  __clt_at=""
+  if [ -n "$__clt_tools" ]; then
+    __clt_at=" --allowedTools $(printf '%q' "$__clt_tools")"
+  fi
 
   # Launcher: self-delete (the temp file never lingers); register a live-session
   # file ('project<TAB>role<TAB>pid<TAB>started' — all safe values, parsed by
@@ -269,13 +279,18 @@ printf '%s\t%s\t%s\t%s\n' '$__clt_project' '$__clt_role' "\$__pid" "\$(date -u +
 cd $__clt_pathq || exit 1
 export CODESYNC_PROJECT='$__clt_project'
 export CODESYNC_ROLE='$__clt_role'
-claude
+claude$__clt_at
 rm -f "\$__sf" 2>/dev/null
 LAUNCHER
 )
   # Universal fallback command (shell-quoted) for when we can't auto-launch.
-  __clt_copy=$(printf 'cd %q && export CODESYNC_PROJECT=%q CODESYNC_ROLE=%q && claude' \
-               "$__clt_path" "$__clt_project" "$__clt_role")
+  if [ -n "$__clt_tools" ]; then
+    __clt_copy=$(printf 'cd %q && export CODESYNC_PROJECT=%q CODESYNC_ROLE=%q && claude --allowedTools %q' \
+                 "$__clt_path" "$__clt_project" "$__clt_role" "$__clt_tools")
+  else
+    __clt_copy=$(printf 'cd %q && export CODESYNC_PROJECT=%q CODESYNC_ROLE=%q && claude' \
+                 "$__clt_path" "$__clt_project" "$__clt_role")
+  fi
 
   if [ -n "${CODESYNC_TEST_LAUNCH_LOG:-}" ]; then
     # Dump the would-run launcher to the log (for inspection) AND print the same
