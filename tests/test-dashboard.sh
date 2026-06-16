@@ -112,6 +112,37 @@ t_eq "launch unknown project → 400" "400" \
 t_eq "launch unregistered role → 400" "400" \
   "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","role":"designer"}' "$B/api/launch-agent")"
 
+# ── create-role (T5/T6): gate + collision + overlap-confirm + atomic write ──
+mkdir -p "$PROJ/_roles"
+printf '# backend\n\n## Owns\n- REST/GraphQL APIs\n\n## Does not own\n- UI\n' > "$PROJ/_roles/backend.md"
+t_eq "create-role without token → 403" "403" \
+  "$(code -X POST -H "$J" -d '{"project":"testproj","role":"newrole"}' "$B/api/create-role")"
+t_eq "create-role bad role name → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","role":"Bad Name"}' "$B/api/create-role")"
+COL=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" \
+  -d '{"project":"testproj","role":"backend","owns":["x"]}' "$B/api/create-role")
+t_contains "name collision refused (no clobber)" "already exists" "$COL"
+# overlapping Owns without confirm → 409 needs_confirm, nothing written
+OV=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" \
+  -d '{"project":"testproj","role":"api2","owns":["REST/GraphQL APIs"]}' "$B/api/create-role")
+t_contains "overlapping Owns asks for confirm" '"needs_confirm": true' "$OV"
+t_contains "overlap names the conflicting role" '"role": "backend"' "$OV"
+t_refute "overlap did NOT write the role file" test -f "$PROJ/_roles/api2.md"
+# confirm=true → created + registered + written
+CRR=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" \
+  -d '{"project":"testproj","role":"api2","owns":["REST/GraphQL APIs"],"confirm":true}' "$B/api/create-role")
+t_contains "confirmed create reports created" '"created": true' "$CRR"
+t_assert "confirmed create wrote the role file" test -f "$PROJ/_roles/api2.md"
+t_contains "new role registered in local config" "api2" "$(cat "$HOME/.config/codesync/config.json")"
+# distinct role needs no confirm
+DR=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" \
+  -d '{"project":"testproj","role":"writer","owns":["Documentation and tutorials"]}' "$B/api/create-role")
+t_contains "distinct role creates without confirm" '"created": true' "$DR"
+# GET /api/roles serves the catalog (token-gated read)
+t_eq "roles catalog WITHOUT token → 403" "403" "$(code "$B/api/roles")"
+RC=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/roles")
+t_contains "roles catalog serves predefined roles" "backend" "$RC"
+
 cleanup
 rm -f "$STATE"
 t_done

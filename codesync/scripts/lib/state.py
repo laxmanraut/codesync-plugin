@@ -456,6 +456,95 @@ def mark_threads_seen(config_dir, project_name, rels, now=None):
     return len(rels)
 
 
+# ─────────────── conflict-overlap heuristic (launch-agents 3A) ──────────────
+# The deterministic slice of the role conflict check that a model-less server
+# CAN do: flag when a new role's Owns shares a significant keyword with an
+# existing role's Owns. Crude and NON-blocking by design — the semantic-
+# duplicate and responsibility-overlap judgments still need /codesync-role-new
+# (a model in the loop). Tuned (stopwords + a 4-char floor) so clearly-distinct
+# roles do not false-flag; the calibration test locks that.
+_OWNS_STOP = {
+    "and", "or", "the", "a", "an", "of", "for", "to", "in", "on", "with", "from",
+    "at", "by", "this", "that", "its", "etc", "other", "others", "across", "into",
+    "up", "per", "side", "own", "owns", "not", "work", "working", "team", "level",
+    "management", "strategy", "support", "general", "stuff", "things",
+}
+
+
+def _owns_tokens(bullets):
+    """Significant lowercase tokens (>=4 chars, non-stopword) from Owns bullets."""
+    out = set()
+    for b in bullets:
+        for w in re.split(r"[^a-z0-9]+", b.lower()):
+            if len(w) >= 4 and w not in _OWNS_STOP:
+                out.add(w)
+    return out
+
+
+def parse_role_owns(path):
+    """Best-effort extract of the '## Owns' bullet lines from a role .md."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return []
+    owns, in_owns = [], False
+    for ln in lines:
+        s = ln.strip()
+        if s.startswith("## "):
+            in_owns = s.lower().startswith("## owns")
+            continue
+        if in_owns and s.startswith("- "):
+            owns.append(s[2:].strip())
+    return owns
+
+
+def role_overlaps(proj_path, new_owns, exclude_role=None):
+    """Existing roles whose Owns share a significant keyword with new_owns.
+
+    Returns [{role, shared:[tokens]}], newest-irrelevant, empty when none. A
+    non-blocking warning signal for create-role; the caller requires an explicit
+    confirm to proceed past it.
+    """
+    roles_dir = os.path.join(proj_path, "_roles")
+    if not os.path.isdir(roles_dir):
+        return []
+    new_tokens = _owns_tokens(new_owns or [])
+    if not new_tokens:
+        return []
+    out = []
+    for fn in sorted(os.listdir(roles_dir)):
+        if not fn.endswith(".md") or fn == "README.md":
+            continue
+        name = fn[:-3]
+        if exclude_role and name == exclude_role:
+            continue
+        shared = sorted(new_tokens & _owns_tokens(parse_role_owns(os.path.join(roles_dir, fn))))
+        if shared:
+            out.append({"role": name, "shared": shared})
+    return out
+
+
+def write_role_file(proj_path, role, owns, not_owns):
+    """Atomically write _roles/<role>.md (temp + os.replace). Returns the path.
+
+    Atomic so a half-written role never syncs to a peer (launch-agents 2A). The
+    caller has already refused a name collision and validated the role name.
+    """
+    roles_dir = os.path.join(proj_path, "_roles")
+    os.makedirs(roles_dir, exist_ok=True)
+    dest = os.path.join(roles_dir, f"{role}.md")
+    body = [f"# {role}", "", "## Owns"]
+    body += [f"- {o}" for o in (owns or [])] or ["- (define)"]
+    body += ["", "## Does not own"]
+    body += [f"- {n}" for n in (not_owns or [])] or ["- (define)"]
+    tmp = os.path.join(roles_dir, f".{role}.md.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write("\n".join(body) + "\n")
+    os.replace(tmp, dest)
+    return dest
+
+
 # ───────────────────── activity & attention (v0.25 / Tranche 2) ─────────────
 # The dashboard's "what's happening / what needs attention" layer. Everything
 # here is DERIVED from persistent timestamps each call (eng-review decision):

@@ -52,6 +52,8 @@ INDEX_PATH = os.path.join(SCRIPT_DIR, "dashboard", "index.html")
 # opened by Python's open(), where backslashes are fine.
 PAIR_PEER = os.path.join(SCRIPT_DIR, "pair-peer.sh").replace("\\", "/")
 LAUNCH_AGENT = os.path.join(SCRIPT_DIR, "launch-agent.sh").replace("\\", "/")
+REGISTER_ROLE = os.path.join(SCRIPT_DIR, "register-role-in-config.sh").replace("\\", "/")
+ROLES_JSON = os.path.join(SCRIPT_DIR, "lib", "roles.json")
 
 # The bash to shell out to. On Windows, PATH-resolved "bash" is the WSL launcher
 # (C:\Windows\System32\bash.exe) which has no distro and fails; platform.sh
@@ -169,6 +171,13 @@ class Handler(BaseHTTPRequestHandler):
                         "folder": state.gather_folder_status(cfg, project)})
         elif u.path == "/api/pending":
             self._json({"pending": state.gather_pending(cfg)})
+        elif u.path == "/api/roles":
+            # The role catalog (read-only static asset) for the new-role form.
+            try:
+                with open(ROLES_JSON, encoding="utf-8") as f:
+                    self._json(json.load(f))
+            except Exception:
+                self._json({"categories": []})
         elif u.path == "/api/threads":
             self._json({"project": project,
                         "threads": state.gather_threads(cfg, project)})
@@ -226,6 +235,17 @@ class Handler(BaseHTTPRequestHandler):
             self._launch_agent(body)
             return
 
+        # create-role: writes the synced project folder + registers locally.
+        if u.path == "/api/create-role":
+            if not self._post_gate():
+                return
+            _touch()
+            body = self._read_json_body()
+            if body is None:
+                return
+            self._create_role(body)
+            return
+
         self._send(404, "404 not found\n", "text/plain; charset=utf-8")
 
     def _launch_agent(self, body):
@@ -266,6 +286,56 @@ class Handler(BaseHTTPRequestHandler):
         copy = out.split("\t", 1)[1] if out.startswith("COPY\t") else ""
         self._json({"ok": ok, "launched": launched, "copy": copy,
                     "project": project, "role": role,
+                    "message": (out if ok else err)[-500:]}, 200 if ok else 500)
+
+    def _create_role(self, body):
+        """POST /api/create-role {project, role, owns[], not_owns[], confirm?}.
+        Writes _roles/<role>.md into the SYNCED project folder and registers it
+        locally. Refuses a name collision (409, no clobber of a synced peer
+        file); warns on an Owns-keyword overlap unless confirm=true. Does NOT
+        launch — the frontend chains to /api/launch-agent so each endpoint stays
+        single-purpose. The deterministic checks here are NOT the full conflict
+        check; the UI points quality-sensitive creation at /codesync-role-new."""
+        cfg = state.load_config(_ctx["config"])
+        project = self._require(body, "project", state._NAME_RE)
+        if project is None:
+            return
+        role = self._require(body, "role", state._NAME_RE)
+        if role is None:
+            return
+        proj = (cfg.get("projects") or {}).get(project)
+        if not proj:
+            self._json({"ok": False, "error": "unknown project"}, 400)
+            return
+        path = proj.get("path", "")
+        if not path or not os.path.isdir(path):
+            self._json({"ok": False, "error": "project not on this machine"}, 409)
+            return
+        owns = [str(x).strip() for x in (body.get("owns") or []) if str(x).strip()]
+        not_owns = [str(x).strip() for x in (body.get("not_owns") or []) if str(x).strip()]
+        # Name-collision: refuse, never clobber a (possibly synced) peer file.
+        if os.path.exists(os.path.join(path, "_roles", f"{role}.md")):
+            self._json({"ok": False, "error": "role already exists",
+                        "hint": "pick another name, or run /codesync-role-new to reconcile"}, 409)
+            return
+        # Owns-overlap: non-blocking warning, requires an explicit confirm.
+        if not body.get("confirm"):
+            overlaps = state.role_overlaps(path, owns, exclude_role=role)
+            if overlaps:
+                self._json({"ok": False, "needs_confirm": True, "overlaps": overlaps,
+                            "hint": "Owns overlaps an existing role. Resend with confirm:true, "
+                                    "or run /codesync-role-new for a full conflict review."}, 409)
+                return
+        try:
+            state.write_role_file(path, role, owns, not_owns)
+            ok, out, err = self._run_bash([REGISTER_ROLE, "--project", project, "--role", role])
+        except subprocess.TimeoutExpired:
+            self._json({"ok": False, "error": "register timed out"}, 504)
+            return
+        except Exception as e:
+            self._json({"ok": False, "error": f"{type(e).__name__}"}, 500)
+            return
+        self._json({"ok": ok, "project": project, "role": role, "created": True,
                     "message": (out if ok else err)[-500:]}, 200 if ok else 500)
 
     def _serve_index(self):
