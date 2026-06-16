@@ -246,11 +246,28 @@ codesync_open_url() {
 codesync_launch_terminal() {
   __clt_project="$1"; __clt_role="$2"; __clt_path="$3"
 
-  # Launcher body, values %q-quoted. `rm -f -- "$0"` first so the temp file
-  # never lingers; `exec claude` replaces the shell so the window holds the
-  # session. Generated entirely by us — the only place the path appears.
-  __clt_script=$(printf '#!/usr/bin/env bash\nrm -f -- "$0"\ncd %q || exit 1\nexport CODESYNC_PROJECT=%q\nexport CODESYNC_ROLE=%q\nexec claude\n' \
-                 "$__clt_path" "$__clt_project" "$__clt_role")
+  # Launcher: self-delete (the temp file never lingers); register a live-session
+  # file ('project<TAB>role<TAB>pid<TAB>started' — all safe values, parsed by
+  # state.gather_sessions); cd (path %q-quoted — a space/quote/$() in the path
+  # can't reach a shell) + export the role/project; run claude (NOT exec, so the
+  # cleanup line runs when the session ends); remove the session file. role and
+  # project are regex-validated names, safe inside the single-quoted slots. The
+  # launcher pid ($$) stays alive for the whole session, so it doubles as the
+  # liveness pid. macOS osascript only ever sees our mktemp path, never these.
+  __clt_pathq=$(printf '%q' "$__clt_path")
+  __clt_script=$(cat <<LAUNCHER
+#!/usr/bin/env bash
+rm -f -- "\$0"
+__sd="\$HOME/.config/codesync/sessions"; mkdir -p "\$__sd" 2>/dev/null
+__sf="\$__sd/\$\$.session"
+printf '%s\t%s\t%s\t%s\n' '$__clt_project' '$__clt_role' "\$\$" "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "\$__sf" 2>/dev/null
+cd $__clt_pathq || exit 1
+export CODESYNC_PROJECT='$__clt_project'
+export CODESYNC_ROLE='$__clt_role'
+claude
+rm -f "\$__sf" 2>/dev/null
+LAUNCHER
+)
   # Universal fallback command (shell-quoted) for when we can't auto-launch.
   __clt_copy=$(printf 'cd %q && export CODESYNC_PROJECT=%q CODESYNC_ROLE=%q && claude' \
                "$__clt_path" "$__clt_project" "$__clt_role")

@@ -10,20 +10,24 @@ t_setup
 LOG="$T_TMP/launch.log"
 export CODESYNC_TEST_LAUNCH_LOG="$LOG"
 
-# ── 1. Construction: self-delete first, cd, fixed exports, exec claude ───────
+# ── 1. Construction: valid bash; self-delete first; session file write+remove;
+#       fixed exports; runs claude (not exec, so cleanup runs on exit) ─────────
 codesync_launch_terminal testproj qa "$PROJ" >/dev/null
 SCRIPT="$(cat "$LOG")"
+t_assert "generated launcher is valid bash" bash -n "$LOG"
 t_contains "launcher self-deletes (rm -f -- \$0)" 'rm -f -- "$0"' "$SCRIPT"
-t_contains "launcher execs the FIXED claude command" "exec claude" "$SCRIPT"
-t_contains "launcher exports the project" "export CODESYNC_PROJECT=testproj" "$SCRIPT"
-t_contains "launcher exports the role" "export CODESYNC_ROLE=qa" "$SCRIPT"
-# self-delete must come BEFORE exec (no lingering secret-bearing temp file).
+t_contains "launcher registers a live-session file" '.session' "$SCRIPT"
+t_contains "launcher runs claude" "claude" "$SCRIPT"
+t_contains "launcher removes the session file on exit" 'rm -f "$__sf"' "$SCRIPT"
+t_contains "launcher exports the project" "export CODESYNC_PROJECT='testproj'" "$SCRIPT"
+t_contains "launcher exports the role" "export CODESYNC_ROLE='qa'" "$SCRIPT"
+# self-delete must come BEFORE claude (no lingering secret-bearing temp file).
 RM_LINE=$(grep -n 'rm -f -- "$0"' "$LOG" | head -1 | cut -d: -f1)
-EXEC_LINE=$(grep -n 'exec claude' "$LOG" | head -1 | cut -d: -f1)
-if [ -n "$RM_LINE" ] && [ -n "$EXEC_LINE" ] && [ "$RM_LINE" -lt "$EXEC_LINE" ]; then
-  t_pass "self-delete precedes exec (no disposal race)"
+CL_LINE=$(grep -nx 'claude' "$LOG" | head -1 | cut -d: -f1)
+if [ -n "$RM_LINE" ] && [ -n "$CL_LINE" ] && [ "$RM_LINE" -lt "$CL_LINE" ]; then
+  t_pass "self-delete precedes the claude run (no disposal race)"
 else
-  t_fail "self-delete must precede exec (rm@$RM_LINE exec@$EXEC_LINE)"
+  t_fail "self-delete must precede claude (rm@$RM_LINE claude@$CL_LINE)"
 fi
 
 # ── 2. CRITICAL injection regression: evil project path cannot execute ──────

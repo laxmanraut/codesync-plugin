@@ -27,6 +27,7 @@ import argparse
 import json
 import os
 import secrets
+import signal
 import socket
 import subprocess
 import sys
@@ -181,12 +182,16 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/api/threads":
             self._json({"project": project,
                         "threads": state.gather_threads(cfg, project)})
+        elif u.path == "/api/sessions":
+            self._json({"project": project,
+                        "sessions": state.gather_sessions(cfg, project, _ctx["config_dir"])})
         elif u.path == "/api/activity":
             # v0.25: full activity payload (feed + attention + autopilot +
             # metrics). All filesystem-derived, so it returns even when
             # Syncthing is offline.
             self._json({"project": project,
-                        **state.gather_activity_full(cfg, project, _ctx["config_dir"])})
+                        **state.gather_activity_full(cfg, project, _ctx["config_dir"]),
+                        "conflicts": state.gather_conflicts(cfg, project)})
         else:
             self._send(404, "404 not found\n", "text/plain; charset=utf-8")
 
@@ -244,6 +249,17 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return
             self._create_role(body)
+            return
+
+        # stop-session: kill a launched agent (allowlisted to our own sessions).
+        if u.path == "/api/stop-session":
+            if not self._post_gate():
+                return
+            _touch()
+            body = self._read_json_body()
+            if body is None:
+                return
+            self._stop_session(body)
             return
 
         self._send(404, "404 not found\n", "text/plain; charset=utf-8")
@@ -356,6 +372,41 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": True, "created": True, "project": project, "role": role,
                     "message": out[-500:]}, 200)
 
+    def _stop_session(self, body):
+        """POST /api/stop-session {project, pid} — stop a launched agent.
+        SECURITY: only kills a pid that matches one of OUR session files for this
+        project, never an arbitrary request pid — so it can't kill other
+        processes on the machine."""
+        cfg = state.load_config(_ctx["config"])
+        project = self._require(body, "project", state._NAME_RE)
+        if project is None:
+            return
+        try:
+            pid = int(str(body.get("pid", "")).strip())
+        except (ValueError, TypeError):
+            self._json({"ok": False, "error": "invalid pid"}, 400)
+            return
+        if project not in (cfg.get("projects") or {}):
+            self._json({"ok": False, "error": "unknown project"}, 400)
+            return
+        # Allowlist: the pid MUST be one of our own session files for this project.
+        sf = os.path.join(_ctx["config_dir"], "sessions", f"{pid}.session")
+        try:
+            with open(sf, encoding="utf-8", errors="replace") as f:
+                parts = f.read().strip().split("\t")
+        except OSError:
+            parts = []
+        if not (len(parts) >= 3 and parts[0] == project and parts[2] == str(pid)):
+            self._json({"ok": False, "error": "no such session"}, 404)
+            return
+        killed = _kill_session(pid)
+        if killed:
+            try:
+                os.remove(sf)
+            except OSError:
+                pass
+        self._json({"ok": killed, "pid": pid, "stopped": killed}, 200 if killed else 500)
+
     def _serve_index(self):
         try:
             with open(INDEX_PATH, "rb") as f:
@@ -364,6 +415,29 @@ class Handler(BaseHTTPRequestHandler):
             self._send(500, "dashboard page missing\n", "text/plain; charset=utf-8")
             return
         self._send(200, html, "text/html; charset=utf-8")
+
+
+def _kill_session(pid):
+    """Stop a launched agent session by pid. Kills the process GROUP (the
+    launcher shell + claude) on POSIX, the process TREE on Windows. Guards
+    against ever killing the dashboard's own group. Returns True on success.
+    The caller has already verified the pid is one of our session files."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True, timeout=10)
+            return True
+        try:
+            pgid = os.getpgid(pid)
+            if pgid != os.getpgid(0):          # never kill our own process group
+                os.killpg(pgid, signal.SIGTERM)
+            else:
+                os.kill(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            os.kill(pid, signal.SIGTERM)
+        return True
+    except Exception:
+        return False
 
 
 def _default_project(cfg):

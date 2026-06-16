@@ -37,6 +37,7 @@ t_assert "server came up (state file written)" test -n "$PORT"
 B="http://127.0.0.1:$PORT"
 
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+J='Content-Type: application/json'   # defined early so every block below can use it
 
 # token gate
 t_eq "overview WITHOUT token → 403" "403" "$(code "$B/api/overview")"
@@ -85,6 +86,38 @@ t_contains "activity returns attention" '"attention"' "$ACT"
 t_contains "activity returns autopilot" '"autopilot"' "$ACT"
 t_contains "activity returns metrics" '"metrics"' "$ACT"
 case "$ACT" in *test-key*|*_processed*) t_fail "activity leaked api key or internal field" ;; *) t_pass "activity payload clean (no key, no _processed)" ;; esac
+# sync-conflict surfacing (launch-agents T1)
+t_contains "activity payload carries a conflicts list" '"conflicts"' "$ACT"
+printf 'loser copy\n' > "$PROJ/_inbox/qa/thread.sync-conflict-20260101-120000-AAAAAAA.md"
+ACTC=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/activity?project=testproj")
+t_contains "a Syncthing conflict file is surfaced" "sync-conflict-20260101" "$ACTC"
+rm -f "$PROJ/_inbox/qa/thread.sync-conflict-20260101-120000-AAAAAAA.md"
+# live agent sessions (launch-agents #2): token-gated; a live-pid session lists
+t_eq "sessions WITHOUT token → 403" "403" "$(code "$B/api/sessions?project=testproj")"
+mkdir -p "$HOME/.config/codesync/sessions"
+printf 'testproj\tqa\t%s\t2026-01-01T00:00:00Z\n' "$$" > "$HOME/.config/codesync/sessions/$$.session"
+SESS=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/sessions?project=testproj")
+t_contains "sessions endpoint lists the live session" '"role": "qa"' "$SESS"
+rm -f "$HOME/.config/codesync/sessions/$$.session"
+
+# stop-session: kills OUR session, refuses a non-session pid, token-gated.
+SDIR="$HOME/.config/codesync/sessions"; mkdir -p "$SDIR"
+t_eq "stop WITHOUT token → 403" "403" \
+  "$(code -X POST -H "$J" -d '{"project":"testproj","pid":1}' "$B/api/stop-session")"
+# a real process that IS one of our sessions → stopped + file removed
+sleep 60 & SPID=$!
+printf 'testproj\tqa\t%s\t2026-01-01T00:00:00Z\n' "$SPID" > "$SDIR/$SPID.session"
+SR=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d "{\"project\":\"testproj\",\"pid\":$SPID}" "$B/api/stop-session")
+t_contains "stop reports stopped" '"stopped": true' "$SR"
+t_refute "stopped session file removed" test -f "$SDIR/$SPID.session"
+wait "$SPID" 2>/dev/null || true
+# SECURITY: a pid with NO session file is refused and NOT killed
+sleep 60 & OPID=$!
+SR2=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" \
+  -d "{\"project\":\"testproj\",\"pid\":$OPID}" "$B/api/stop-session")
+t_eq "stop a non-session pid → 404" "404" "$SR2"
+t_assert "non-session process was NOT killed" kill -0 "$OPID"
+kill "$OPID" 2>/dev/null || true
 
 # unknown path → 404 (with token)
 t_eq "unknown path → 404" "404" "$(code -H "X-CSDash-Token: $TOKEN" "$B/api/nope")"
@@ -115,6 +148,7 @@ t_eq "launch unregistered role → 400" "400" \
 # ── create-role (T5/T6): gate + collision + overlap-confirm + atomic write ──
 mkdir -p "$PROJ/_roles"
 printf '# backend\n\n## Owns\n- REST/GraphQL APIs\n\n## Does not own\n- UI\n' > "$PROJ/_roles/backend.md"
+# (J / launch-section vars defined near the top now)
 t_eq "create-role without token → 403" "403" \
   "$(code -X POST -H "$J" -d '{"project":"testproj","role":"newrole"}' "$B/api/create-role")"
 t_eq "create-role bad role name → 400" "400" \

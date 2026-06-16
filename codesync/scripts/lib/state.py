@@ -527,7 +527,12 @@ def role_overlaps(proj_path, new_owns, exclude_role=None):
         if exclude_role and name == exclude_role:
             continue
         shared = sorted(new_tokens & _owns_tokens(parse_role_owns(os.path.join(roles_dir, fn))))
-        if shared:
+        # Require >=2 shared significant words. A single common word (e.g. two
+        # roles both saying "design" in unrelated senses) is noise that trains
+        # the user to click through; >=2 still catches real dups (two API roles
+        # share rest+graphql+apis). /codesync-role-new is the model-backed check
+        # for subtler single-term overlaps this deliberately lets pass.
+        if len(shared) >= 2:
             out.append({"role": name, "shared": shared})
     return out
 
@@ -550,6 +555,137 @@ def write_role_file(proj_path, role, owns, not_owns):
         f.write("\n".join(body) + "\n")
     os.replace(tmp, dest)
     return dest
+
+
+# ──────────────── sync-conflict surfacing (launch-agents T1) ────────────────
+def gather_conflicts(cfg, project_name):
+    """Syncthing *.sync-conflict-* files anywhere under the project.
+
+    Syncthing is last-write-wins; a concurrent edit to the same file (two
+    machines, offline or racing) is reconciled by KEEPING both — the loser
+    becomes `name.sync-conflict-<date>-<device>.<ext>`, which nothing else in
+    codesync reads. The local create-role 409 only stops the same-machine clash;
+    this surfaces the distributed one so the silent reconciliation is visible.
+    Scans _inbox/, _roles/, _docs/, _archive/. Newest first.
+    """
+    proj = (cfg.get("projects") or {}).get(project_name)
+    if not proj:
+        return []
+    proj_path = proj.get("path", "")
+    if not proj_path or not os.path.isdir(proj_path):
+        return []
+    now = time.time()
+    out = []
+    for root in ("_inbox", "_roles", "_docs", "_archive"):
+        base = os.path.join(proj_path, root)
+        if not os.path.isdir(base):
+            continue
+        for dirpath, _dirs, files in os.walk(base):
+            for fn in files:
+                if ".sync-conflict-" in fn:
+                    full = os.path.join(dirpath, fn)
+                    rel = os.path.relpath(full, proj_path).replace(os.sep, "/")
+                    try:
+                        mtime = os.path.getmtime(full)
+                    except OSError:
+                        mtime = 0
+                    out.append({"rel": rel, "name": fn, "mtime": mtime,
+                                "age": short_age(mtime, now)})
+    out.sort(key=lambda e: -e["mtime"])
+    return out
+
+
+# ──────────────── live agent sessions (launch-agents #2) ────────────────────
+SESSION_TTL = 12 * 3600   # reap a lingering session file after 12h (crash / window-close safety net)
+
+
+def _pid_alive(pid):
+    """True / False / None(can't tell). Used to reap a session file when the
+    terminal closed before its own cleanup ran (SIGHUP kills the launcher)."""
+    if pid is None or pid < 0:
+        return False
+    if os.name == "nt":
+        # IMPORTANT: os.kill(pid, 0) on Windows is NOT a liveness probe — sig 0
+        # is CTRL_C_EVENT, so it would try to send Ctrl-C, not check the pid.
+        # Use OpenProcess + WaitForSingleObject(0): WAIT_OBJECT_0 (0) = the
+        # process is signaled (exited); WAIT_TIMEOUT (nonzero) = still running.
+        try:
+            import ctypes
+            k = ctypes.windll.kernel32
+            SYNCHRONIZE = 0x00100000
+            h = k.OpenProcess(SYNCHRONIZE, False, int(pid))
+            if not h:
+                return False        # no such process (or gone)
+            try:
+                return k.WaitForSingleObject(h, 0) != 0
+            finally:
+                k.CloseHandle(h)
+        except Exception:
+            return None             # couldn't check → fall back to TTL
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True          # exists, just not ours
+    except Exception:
+        return None
+
+
+def gather_sessions(cfg, project_name, config_dir=None, now=None):
+    """Live agent sessions (terminals) for this project on THIS machine.
+
+    A launched terminal writes sessions/<pid>.session
+    ('project\\trole\\tpid\\tstarted-ISO') and removes it on exit. On a clean
+    exit the file is gone immediately; if the window was just closed (SIGHUP
+    kills the launcher before its cleanup line), the file lingers and we reap it
+    here once its launcher pid is dead (checked on both macOS and Windows), or
+    after SESSION_TTL if liveness genuinely can't be determined.
+    """
+    proj = (cfg.get("projects") or {}).get(project_name)
+    if not proj:
+        return []
+    if config_dir:
+        sdir = os.path.join(config_dir, "sessions")
+    else:
+        sdir = os.path.expanduser("~/.config/codesync/sessions")
+    if not os.path.isdir(sdir):
+        return []
+    now = time.time() if now is None else now
+    out = []
+    for fn in sorted(os.listdir(sdir)):
+        if not fn.endswith(".session"):
+            continue
+        full = os.path.join(sdir, fn)
+        try:
+            with open(full, encoding="utf-8", errors="replace") as f:
+                parts = f.read().strip().split("\t")
+        except OSError:
+            continue
+        if len(parts) < 4 or parts[0] != project_name:
+            continue
+        role, spid, started = parts[1], parts[2], parts[3]
+        try:
+            pid = int(spid)
+        except ValueError:
+            pid = -1
+        alive = _pid_alive(pid)
+        try:
+            file_age = now - os.path.getmtime(full)
+        except OSError:
+            file_age = 0
+        if alive is False or (alive is None and file_age > SESSION_TTL):
+            try:
+                os.remove(full)        # reap the dead/stale session
+            except OSError:
+                pass
+            continue
+        started_ep = _iso_to_epoch(started)
+        out.append({"role": role, "pid": pid, "started": started,
+                    "age": short_age(started_ep, now) if started_ep else "—"})
+    out.sort(key=lambda e: e["role"])
+    return out
 
 
 # ───────────────────── activity & attention (v0.25 / Tranche 2) ─────────────
