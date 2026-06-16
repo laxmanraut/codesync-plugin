@@ -41,6 +41,13 @@ _ID_RE = re.compile(r'^[A-Z2-7]{7}(-[A-Z2-7]{7}){7}$')
 # so a validated name is safe to interpolate into a launched command's env.
 _NAME_RE = re.compile(r'^[a-z0-9][a-z0-9_-]*$')
 
+# Windows reserved device names — a role named one of these cannot be written as
+# <name>.md on Windows (the write fails / the file can't sync). create-role
+# refuses them up front, mirroring the attachment-name guard.
+_WIN_RESERVED = ({"con", "prn", "aux", "nul"}
+                 | {f"com{i}" for i in range(1, 10)}
+                 | {f"lpt{i}" for i in range(1, 10)})
+
 # Thread sort: surface actionable items first (matches session-start.sh).
 _STATUS_PRI = {"todo": 0, "wip": 1, "blocked": 2, "note": 3, "done": 4,
                "(no-fm)": 5, "": 5}

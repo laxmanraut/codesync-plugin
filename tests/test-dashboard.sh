@@ -119,6 +119,8 @@ t_eq "create-role without token → 403" "403" \
   "$(code -X POST -H "$J" -d '{"project":"testproj","role":"newrole"}' "$B/api/create-role")"
 t_eq "create-role bad role name → 400" "400" \
   "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","role":"Bad Name"}' "$B/api/create-role")"
+t_eq "create-role reserved Windows name (con) → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","role":"con","owns":["x"]}' "$B/api/create-role")"
 COL=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" \
   -d '{"project":"testproj","role":"backend","owns":["x"]}' "$B/api/create-role")
 t_contains "name collision refused (no clobber)" "already exists" "$COL"

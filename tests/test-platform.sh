@@ -23,4 +23,10 @@ t_assert "codesync_mtime returns integer" test "$M" -gt 0
 codesync_notify "title" "body"
 t_contains "codesync_notify uses test hook" "title|body" "$(cat "$CODESYNC_TEST_NOTIFY_LOG")"
 
+# codesync_ps_lit — neutralizes single quotes so a peer-controlled thread title
+# can't break out of the Windows PowerShell single-quoted toast literal (RCE).
+t_eq "ps_lit doubles a single quote"            "a''b"            "$(codesync_ps_lit "a'b")"
+t_eq "ps_lit passes benign text untouched"      "Wire the gateway" "$(codesync_ps_lit "Wire the gateway")"
+t_eq "ps_lit neutralizes a breakout payload"    "x''; calc; ''"   "$(codesync_ps_lit "x'; calc; '")"
+
 t_done

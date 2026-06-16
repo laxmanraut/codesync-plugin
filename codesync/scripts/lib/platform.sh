@@ -132,6 +132,14 @@ codesync_syncthing_config_dir() {
 # codesync_notify TITLE BODY — fire-and-forget, never blocks, never errors.
 # Test hook: when CODESYNC_TEST_NOTIFY_LOG is set, append "TITLE|BODY" to that
 # file instead of firing a real notification (lets the suite count toasts).
+
+# codesync_ps_lit STR — escape STR for safe embedding inside a PowerShell
+# SINGLE-quoted literal: double every single quote ('' is a literal ' in
+# '...'). Without this a peer-controlled thread title (now passed to the toast
+# by the 24/7 watcher) could break out of the quotes into PowerShell — RCE on
+# Windows. macOS escapes its own (double-quoted osascript) context separately.
+codesync_ps_lit() { printf '%s' "$1" | sed "s/'/''/g"; }
+
 codesync_notify() {
   __cn_title="$1"; __cn_body="$2"
   if [ -n "${CODESYNC_TEST_NOTIFY_LOG:-}" ]; then
@@ -150,17 +158,22 @@ codesync_notify() {
       # this machine (Focus Assist, policy), the design's sanctioned fallback
       # is BurntToast — installed during the setup hour, used automatically
       # here when present. The M1 visibility spike validates this live.
+      # Escape both fields for the PowerShell single-quoted literals — the title
+      # can be peer-controlled (thread title via the watcher), so an unescaped
+      # quote would be PowerShell injection.
+      __cn_title_ps=$(codesync_ps_lit "$__cn_title")
+      __cn_body_ps=$(codesync_ps_lit "$__cn_body")
       powershell.exe -NoProfile -NonInteractive -Command "
         try {
           if (Get-Module -ListAvailable -Name BurntToast) {
             Import-Module BurntToast;
-            New-BurntToastNotification -Text '$__cn_title', '$__cn_body' | Out-Null
+            New-BurntToastNotification -Text '$__cn_title_ps', '$__cn_body_ps' | Out-Null
           } else {
             [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null;
             \$tpl = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);
             \$texts = \$tpl.GetElementsByTagName('text');
-            \$texts.Item(0).AppendChild(\$tpl.CreateTextNode('$__cn_title')) | Out-Null;
-            \$texts.Item(1).AppendChild(\$tpl.CreateTextNode('$__cn_body')) | Out-Null;
+            \$texts.Item(0).AppendChild(\$tpl.CreateTextNode('$__cn_title_ps')) | Out-Null;
+            \$texts.Item(1).AppendChild(\$tpl.CreateTextNode('$__cn_body_ps')) | Out-Null;
             \$toast = [Windows.UI.Notifications.ToastNotification]::new(\$tpl);
             [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe').Show(\$toast)
           }

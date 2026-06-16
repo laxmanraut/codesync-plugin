@@ -303,6 +303,9 @@ class Handler(BaseHTTPRequestHandler):
         role = self._require(body, "role", state._NAME_RE)
         if role is None:
             return
+        if role.lower() in state._WIN_RESERVED:
+            self._json({"ok": False, "error": "role name is reserved on Windows"}, 400)
+            return
         proj = (cfg.get("projects") or {}).get(project)
         if not proj:
             self._json({"ok": False, "error": "unknown project"}, 400)
@@ -326,17 +329,32 @@ class Handler(BaseHTTPRequestHandler):
                             "hint": "Owns overlaps an existing role. Resend with confirm:true, "
                                     "or run /codesync-role-new for a full conflict review."}, 409)
                 return
+        # Write the synced role file atomically, THEN register it locally. If
+        # register fails, roll the file back — otherwise an orphaned synced
+        # _roles/<role>.md is left behind and a retry is permanently blocked by
+        # the collision guard above. `created` reflects the FULL success.
         try:
             state.write_role_file(path, role, owns, not_owns)
+        except Exception as e:
+            self._json({"ok": False, "created": False,
+                        "error": f"write failed: {type(e).__name__}"}, 500)
+            return
+        try:
             ok, out, err = self._run_bash([REGISTER_ROLE, "--project", project, "--role", role])
         except subprocess.TimeoutExpired:
-            self._json({"ok": False, "error": "register timed out"}, 504)
-            return
+            ok, out, err = False, "", "register timed out"
         except Exception as e:
-            self._json({"ok": False, "error": f"{type(e).__name__}"}, 500)
+            ok, out, err = False, "", type(e).__name__
+        if not ok:
+            try:
+                os.remove(os.path.join(path, "_roles", f"{role}.md"))
+            except OSError:
+                pass
+            self._json({"ok": False, "created": False,
+                        "error": f"register failed: {err}"[-300:]}, 500)
             return
-        self._json({"ok": ok, "project": project, "role": role, "created": True,
-                    "message": (out if ok else err)[-500:]}, 200 if ok else 500)
+        self._json({"ok": True, "created": True, "project": project, "role": role,
+                    "message": out[-500:]}, 200)
 
     def _serve_index(self):
         try:

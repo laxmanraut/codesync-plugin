@@ -56,7 +56,7 @@ n = state.mark_threads_seen(config_dir, project, [u["rel"] for u in unseen])
 title = unseen[0]["title"] if len(unseen) == 1 else ""
 print(f"{n}\t{title}")
 PY
-)
+) || OUT=""   # a failed scan must not abort under set -e — fall through to quiet exit
 
 COUNT=$(printf '%s\n' "$OUT" | awk -F'\t' 'NR==1{print $1}')
 ONLY_TITLE=$(printf '%s\n' "$OUT" | awk -F'\t' 'NR==1{print $2}')
