@@ -255,12 +255,17 @@ codesync_launch_terminal() {
   # launcher pid ($$) stays alive for the whole session, so it doubles as the
   # liveness pid. macOS osascript only ever sees our mktemp path, never these.
   __clt_pathq=$(printf '%q' "$__clt_path")
+  # __pid is the liveness pid the dashboard checks. In Git Bash, "$$" is the
+  # MSYS pid, but the native-Python server checks liveness / taskkills via the
+  # WINDOWS pid — so use /proc/$$/winpid when present (Git Bash exposes it),
+  # falling back to $$ on macOS/Linux. Filename and pid field use the same value.
   __clt_script=$(cat <<LAUNCHER
 #!/usr/bin/env bash
 rm -f -- "\$0"
 __sd="\$HOME/.config/codesync/sessions"; mkdir -p "\$__sd" 2>/dev/null
-__sf="\$__sd/\$\$.session"
-printf '%s\t%s\t%s\t%s\n' '$__clt_project' '$__clt_role' "\$\$" "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "\$__sf" 2>/dev/null
+__pid=\$\$; [ -r "/proc/\$\$/winpid" ] && __pid=\$(cat "/proc/\$\$/winpid" 2>/dev/null || echo \$\$)
+__sf="\$__sd/\$__pid.session"
+printf '%s\t%s\t%s\t%s\n' '$__clt_project' '$__clt_role' "\$__pid" "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "\$__sf" 2>/dev/null
 cd $__clt_pathq || exit 1
 export CODESYNC_PROJECT='$__clt_project'
 export CODESYNC_ROLE='$__clt_role'

@@ -95,21 +95,27 @@ rm -f "$PROJ/_inbox/qa/thread.sync-conflict-20260101-120000-AAAAAAA.md"
 # live agent sessions (launch-agents #2): token-gated; a live-pid session lists
 t_eq "sessions WITHOUT token → 403" "403" "$(code "$B/api/sessions?project=testproj")"
 mkdir -p "$HOME/.config/codesync/sessions"
-printf 'testproj\tqa\t%s\t2026-01-01T00:00:00Z\n' "$$" > "$HOME/.config/codesync/sessions/$$.session"
+# The server checks liveness by the WINDOWS pid; in Git Bash $$ is the MSYS pid,
+# so use /proc/$$/winpid where present (falls back to $$ on macOS).
+TPID=$$; [ -r "/proc/$$/winpid" ] && TPID=$(cat "/proc/$$/winpid")
+printf 'testproj\tqa\t%s\t2026-01-01T00:00:00Z\n' "$TPID" > "$HOME/.config/codesync/sessions/$TPID.session"
 SESS=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/sessions?project=testproj")
 t_contains "sessions endpoint lists the live session" '"role": "qa"' "$SESS"
-rm -f "$HOME/.config/codesync/sessions/$$.session"
+rm -f "$HOME/.config/codesync/sessions/$TPID.session"
 
 # stop-session: kills OUR session, refuses a non-session pid, token-gated.
 SDIR="$HOME/.config/codesync/sessions"; mkdir -p "$SDIR"
 t_eq "stop WITHOUT token → 403" "403" \
   "$(code -X POST -H "$J" -d '{"project":"testproj","pid":1}' "$B/api/stop-session")"
-# a real process that IS one of our sessions → stopped + file removed
+# a real process that IS one of our sessions → stopped + file removed.
+# Use the WINDOWS pid (winpid) so taskkill actually targets it on Git Bash —
+# otherwise it gets the MSYS pid, never kills, and `wait` blocks the full 60s.
 sleep 60 & SPID=$!
-printf 'testproj\tqa\t%s\t2026-01-01T00:00:00Z\n' "$SPID" > "$SDIR/$SPID.session"
-SR=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d "{\"project\":\"testproj\",\"pid\":$SPID}" "$B/api/stop-session")
+SWPID=$SPID; [ -r "/proc/$SPID/winpid" ] && SWPID=$(cat "/proc/$SPID/winpid")
+printf 'testproj\tqa\t%s\t2026-01-01T00:00:00Z\n' "$SWPID" > "$SDIR/$SWPID.session"
+SR=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d "{\"project\":\"testproj\",\"pid\":$SWPID}" "$B/api/stop-session")
 t_contains "stop reports stopped" '"stopped": true' "$SR"
-t_refute "stopped session file removed" test -f "$SDIR/$SPID.session"
+t_refute "stopped session file removed" test -f "$SDIR/$SWPID.session"
 wait "$SPID" 2>/dev/null || true
 # SECURITY: a pid with NO session file is refused and NOT killed
 sleep 60 & OPID=$!
