@@ -37,6 +37,8 @@ while [ $# -gt 0 ]; do
     --enable)    MODE="role";  ENABLED="1"; shift ;;
     --disable)   MODE="role";  ENABLED="0"; shift ;;
     --tools)     TOOLS="$2";   shift 2 ;;
+    --install)   MODE="install"; shift ;;
+    --teardown)  MODE="teardown"; shift ;;
     --status)    MODE="status"; shift ;;
     *) shift ;;
   esac
@@ -120,6 +122,26 @@ PY
     else
       log "autonomy disabled for role '$ROLE'"
     fi
+    ;;
+
+  install)
+    # Reuse the shared scheduler helper (CQ2) — same install path the watcher
+    # uses, now fires autonomy-run.sh on a schedule.
+    _AINT="${CODESYNC_AUTONOMY_INTERVAL:-900}"
+    codesync_install_scheduled_job \
+      "com.codesync.autonomy.$PROJECT" "codesync-autonomy-$PROJECT" \
+      "$SCRIPT_DIR/autonomy-run.sh" "$_AINT" \
+      "$CONFIG_DIR/autonomy-$PROJECT.log" "$CONFIG_DIR/autonomy-$PROJECT.cmd" \
+      "CODESYNC_PROJECT=$PROJECT" \
+      && log "autonomy runner scheduled (every $(( _AINT / 60 )) min)" \
+      || err "could not install the scheduled job"
+    ;;
+
+  teardown)
+    codesync_remove_scheduled_job \
+      "com.codesync.autonomy.$PROJECT" "codesync-autonomy-$PROJECT" \
+      "$CONFIG_DIR/autonomy-$PROJECT.cmd" \
+      && log "autonomy runner unscheduled"
     ;;
 
   status)
