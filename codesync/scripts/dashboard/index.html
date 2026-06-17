@@ -112,6 +112,24 @@
   tr.ddel .dcode{background:rgba(248,81,73,.15)} tr.ddel .dgut{background:rgba(248,81,73,.24);color:#ff9b95}
   tr.dhunk td{background:rgba(56,139,253,.13);color:#7d8bb5;padding:2px 12px;font-size:11.5px}
   tr.dnl .dcode{color:#5b6270;font-style:italic}
+  /* toolbar (unified/split) + collapsible file headers */
+  .dtoolbar{display:flex;gap:6px;padding:6px 10px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--border)}
+  .dmode{font:inherit;font-size:11.5px;font-weight:600;padding:3px 11px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer}
+  .dmode.on{background:var(--accent-bg);color:var(--accent-ink);border-color:transparent}
+  .dfile+.dfile .dfile-h{border-top:1px solid var(--border)}
+  .dfile-h{cursor:pointer;user-select:none}
+  .dchev{display:inline-block;width:12px;color:var(--faint);font-size:10px}
+  .dfname{font-weight:600}
+  .dsign{color:#6e7681;user-select:none}
+  /* split view: two code columns */
+  .dsplit .dcode{width:50%}
+  .dsplit td.midsep{border-right:1px solid rgba(255,255,255,.10)}
+  td.c-del{background:rgba(248,81,73,.15)} td.g-del{background:rgba(248,81,73,.24);color:#ff9b95}
+  td.c-add{background:rgba(46,160,67,.16)} td.g-add{background:rgba(46,160,67,.24);color:#7ee0a0}
+  /* syntax tokens (GitHub dark palette) */
+  .t-kw{color:#ff7b72} .t-str{color:#a5d6ff} .t-com{color:#8b949e;font-style:italic}
+  .t-num{color:#79c0ff} .t-fn{color:#d2a8ff} .t-prop{color:#79c0ff}
+  .t-md-h{color:#79c0ff;font-weight:700} .t-md-b{color:#e6edf3;font-weight:700} .t-md-c{color:#a5d6ff}
 
   .calm{text-align:center;padding:38px 20px;border:1px dashed var(--border);border-radius:16px;background:var(--card)}
   .calm .big{font-size:19px;font-weight:650} .calm .small{color:var(--muted);margin-top:7px}
@@ -290,44 +308,156 @@ function renderProjects(o){
 }
 
 // ── NEEDS YOU (unified queue) ──
-// Parse a unified `git diff` into a GitHub-style table: per-file header with
-// +/- counts, two line-number gutters (old | new), color-coded add/del/context
-// rows. All cell text is set via textContent (el's "text"), so agent/peer diff
-// content can never inject HTML.
+// Render a unified `git diff` GitHub-style: per-file header (collapsible, +/-
+// counts), a Unified/Split toggle, two line-number gutters, color-coded rows,
+// and lightweight syntax highlighting. All text is set via textContent (el's
+// "text"), so agent/peer-authored diff content can never inject HTML.
+const HL_KW=new Set(("function return if else for while const let var def class import from export default async await new "
+ +"delete typeof instanceof try catch finally throw switch case break continue this super extends implements interface "
+ +"type struct func package go defer chan select fallthrough map range public private protected static void int long "
+ +"float double bool boolean string char byte true false null nil None True False undefined and or not is in as with "
+ +"lambda yield raise except pass elif global nonlocal print echo local then do done fi esac use mod fn mut pub impl "
+ +"trait enum match where unsafe return await").split(/\s+/));
+function langOf(name){
+  const e=(name||"").toLowerCase().split(".").pop();
+  if(e==="md"||e==="markdown")return"md";
+  if(e==="json")return"json";
+  if(["py","sh","bash","zsh","rb","yml","yaml","toml","pl","r"].includes(e))return"codehash";
+  if(["js","jsx","ts","tsx","mjs","cjs","go","rs","c","h","cc","cpp","hpp","java","kt","kts","swift","php","cs","scala","m","mm"].includes(e))return"code";
+  return"plain";
+}
+function tokCode(s,hash){
+  const out=[]; const re=hash
+    ? /(#[^\n]*|\/\*[\s\S]*?\*\/|\/\/[^\n]*)|("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|`(?:[^`\\]|\\.)*`?)|(\b\d[\w.]*)|([A-Za-z_$][\w$]*)|(\s+)|([^\w\s]+)/g
+    : /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|`(?:[^`\\]|\\.)*`?)|(\b\d[\w.]*)|([A-Za-z_$][\w$]*)|(\s+)|([^\w\s]+)/g;
+  let m;while((m=re.exec(s))){
+    if(m[1])out.push({c:"t-com",t:m[1]});
+    else if(m[2])out.push({c:"t-str",t:m[2]});
+    else if(m[3])out.push({c:"t-num",t:m[3]});
+    else if(m[4]){const kw=HL_KW.has(m[4]);const fn=!kw&&s[re.lastIndex]==="(";out.push({c:kw?"t-kw":(fn?"t-fn":""),t:m[4]});}
+    else out.push({t:m[0]});
+    if(m.index===re.lastIndex)re.lastIndex++;
+  }
+  return out;
+}
+function tokMd(s){
+  if(/^#{1,6}\s/.test(s))return[{c:"t-md-h",t:s}];
+  const out=[];const re=/(`[^`]*`)|(\*\*[^*]+\*\*|__[^_]+__)|([\s\S]+?(?=`|\*\*|__|$))/g;let m;
+  while((m=re.exec(s))){ if(m[1])out.push({c:"t-md-c",t:m[1]}); else if(m[2])out.push({c:"t-md-b",t:m[2]}); else if(m[3])out.push({t:m[3]});
+    if(m.index===re.lastIndex)re.lastIndex++; }
+  return out;
+}
+function tokJson(s){
+  const out=[];const re=/("(?:[^"\\]|\\.)*")(\s*:)?|(\b(?:true|false|null)\b)|(-?\d[\d.eE+\-]*)|(\s+)|([^\s]+)/g;let m;
+  while((m=re.exec(s))){ if(m[1]){out.push({c:m[2]?"t-prop":"t-str",t:m[1]});if(m[2])out.push({t:m[2]});}
+    else if(m[3])out.push({c:"t-kw",t:m[3]}); else if(m[4])out.push({c:"t-num",t:m[4]}); else out.push({t:m[0]});
+    if(m.index===re.lastIndex)re.lastIndex++; }
+  return out;
+}
+function hlInto(td,code,lang){
+  let toks;
+  if(lang==="md")toks=tokMd(code);
+  else if(lang==="json")toks=tokJson(code);
+  else if(lang==="code")toks=tokCode(code,false);
+  else if(lang==="codehash")toks=tokCode(code,true);
+  else toks=[{t:code}];
+  toks.forEach(t=>td.appendChild(t.c?el("span",{class:t.c,text:t.t}):document.createTextNode(t.t)));
+}
+function parseDiffModel(text){
+  const files=[];let f=null,h=null,oldn=0,newn=0;
+  function nf(name){if(f)files.push(f);f={name:name||"file",adds:0,dels:0,hunks:[]};h=null;}
+  (text||"").split("\n").forEach(ln=>{
+    if(ln.startsWith("diff --git")){const m=/ b\/(.+)$/.exec(ln);nf(m?m[1]:"file");return;}
+    if(ln.startsWith("+++ ")){const m=/^\+\+\+ (?:b\/)?(.+)/.exec(ln);if(f&&m&&m[1]!=="/dev/null")f.name=m[1];return;}
+    if(ln.startsWith("--- "))return;
+    if(/^(index |old mode|new mode|new file|deleted file|similarity|rename |copy |Binary )/.test(ln))return;
+    if(ln.startsWith("@@")){if(!f)nf("file");const m=/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(ln);if(m){oldn=+m[1];newn=+m[2];}
+      h={header:ln,lines:[]};f.hunks.push(h);return;}
+    if(!f)return; if(!h){h={header:"",lines:[]};f.hunks.push(h);}
+    if(ln.startsWith("\\")){h.lines.push({type:"nl",text:ln});return;}
+    if(ln.startsWith("+")){f.adds++;h.lines.push({type:"add",text:ln.slice(1),newn:newn++});}
+    else if(ln.startsWith("-")){f.dels++;h.lines.push({type:"del",text:ln.slice(1),oldn:oldn++});}
+    else{h.lines.push({type:"ctx",text:ln.slice(1),oldn:oldn++,newn:newn++});}
+  });
+  if(f)files.push(f);
+  return files;
+}
+function renderUnified(f,lang){
+  const tbl=el("table",{class:"dtable"});
+  f.hunks.forEach(h=>{
+    if(h.header)tbl.appendChild(el("tr",{class:"dhunk"},[el("td",{colspan:"2"}),el("td",{class:"dcode",text:h.header})]));
+    h.lines.forEach(ln=>{
+      if(ln.type==="nl"){tbl.appendChild(el("tr",{class:"dnl"},[el("td",{class:"dgut"}),el("td",{class:"dgut"}),el("td",{class:"dcode",text:ln.text})]));return;}
+      const tr=el("tr",{class:ln.type==="add"?"dadd":ln.type==="del"?"ddel":""});
+      tr.appendChild(el("td",{class:"dgut",text:ln.oldn!=null?String(ln.oldn):""}));
+      tr.appendChild(el("td",{class:"dgut",text:ln.newn!=null?String(ln.newn):""}));
+      const code=el("td",{class:"dcode"});
+      code.appendChild(el("span",{class:"dsign",text:ln.type==="add"?"+":ln.type==="del"?"-":" "}));
+      hlInto(code,ln.text,lang);
+      tr.appendChild(code);tbl.appendChild(tr);
+    });
+  });
+  return tbl;
+}
+function splitRows(h){
+  const rows=[];const L=h.lines;let i=0;
+  while(i<L.length){
+    const ln=L[i];
+    if(ln.type==="nl"){i++;continue;}
+    if(ln.type==="ctx"){rows.push({l:ln,r:ln,ctx:true});i++;continue;}
+    const dels=[],adds=[];
+    while(i<L.length&&L[i].type==="del"){dels.push(L[i]);i++;}
+    while(i<L.length&&L[i].type==="add"){adds.push(L[i]);i++;}
+    const n=Math.max(dels.length,adds.length);
+    if(!n){i++;continue;}
+    for(let k=0;k<n;k++)rows.push({l:dels[k]||null,r:adds[k]||null});
+  }
+  return rows;
+}
+function renderSplit(f,lang){
+  const tbl=el("table",{class:"dtable dsplit"});
+  f.hunks.forEach(h=>{
+    if(h.header)tbl.appendChild(el("tr",{class:"dhunk"},[el("td",{class:"dcode",colspan:"4",text:h.header})]));
+    splitRows(h).forEach(r=>{
+      const tr=el("tr");
+      const lDel=r.l&&!r.ctx; const rAdd=r.r&&!r.ctx;
+      const lg=el("td",{class:"dgut"+(lDel?" g-del":"")});lg.textContent=r.l?(r.l.oldn!=null?String(r.l.oldn):""):"";
+      const lc=el("td",{class:"dcode midsep"+(lDel?" c-del":"")});
+      if(r.l){lc.appendChild(el("span",{class:"dsign",text:lDel?"-":" "}));hlInto(lc,r.l.text,lang);}
+      const rg=el("td",{class:"dgut"+(rAdd?" g-add":"")});rg.textContent=r.r?(r.r.newn!=null?String(r.r.newn):""):"";
+      const rc=el("td",{class:"dcode"+(rAdd?" c-add":"")});
+      if(r.r){rc.appendChild(el("span",{class:"dsign",text:rAdd?"+":" "}));hlInto(rc,r.r.text,lang);}
+      tr.appendChild(lg);tr.appendChild(lc);tr.appendChild(rg);tr.appendChild(rc);
+      tbl.appendChild(tr);
+    });
+  });
+  return tbl;
+}
+function renderFile(f,mode){
+  const lang=langOf(f.name);
+  const wrap=el("div",{class:"dfile"});
+  const chev=el("span",{class:"dchev",text:"▾"});
+  const cnt=el("span",{class:"cnt"},[el("span",{class:"add",text:"+"+f.adds}),document.createTextNode("  "),el("span",{class:"del",text:"−"+f.dels})]);
+  const head=el("div",{class:"dfile-h"},[chev,el("span",{class:"dfname",text:f.name}),cnt]);
+  const tbl=mode==="split"?renderSplit(f,lang):renderUnified(f,lang);
+  head.addEventListener("click",()=>{const hid=tbl.style.display==="none";tbl.style.display=hid?"":"none";chev.textContent=hid?"▾":"▸";});
+  wrap.appendChild(head);wrap.appendChild(tbl);
+  return wrap;
+}
+let _diffMode="unified";
 function renderDiff(container,text){
   clear(container);
+  const files=parseDiffModel(text);
+  if(!files.length){container.appendChild(el("div",{class:"dmsg",text:"(empty diff)"}));return;}
+  const uni=el("button",{class:"dmode",text:"Unified"}),spl=el("button",{class:"dmode",text:"Split"});
   const scroll=el("div",{class:"dscroll"});
-  let table=null,headerEl=null,oldn=0,newn=0,adds=0,dels=0;
-  function flush(){ if(headerEl){const c=headerEl.querySelector(".cnt");clear(c);
-    c.appendChild(el("span",{class:"add",text:"+"+adds}));c.appendChild(document.createTextNode("  "));
-    c.appendChild(el("span",{class:"del",text:"−"+dels}));} }
-  function startFile(name){ flush(); adds=0;dels=0;
-    headerEl=el("div",{class:"dfile-h"},[el("span",{text:name||"file"}),el("span",{class:"cnt"})]);
-    scroll.appendChild(headerEl);
-    table=el("table",{class:"dtable"}); scroll.appendChild(table); }
-  function row(cls,o,n,t){ const tr=el("tr",cls?{class:cls}:null,[
-    el("td",{class:"dgut",text:o==null?"":String(o)}),
-    el("td",{class:"dgut",text:n==null?"":String(n)}),
-    el("td",{class:"dcode",text:t})]); table.appendChild(tr); }
-  function hunk(t){ const tr=el("tr",{class:"dhunk"},[el("td",{colspan:"2"}),el("td",{class:"dcode",text:t})]); table.appendChild(tr); }
-  (text||"").split("\n").forEach(ln=>{
-    if(ln.startsWith("diff --git")){ const m=/ b\/(.+)$/.exec(ln); startFile(m?m[1]:"file"); return; }
-    if(ln.startsWith("+++ ")){ const m=/^\+\+\+ (?:b\/)?(.+)/.exec(ln);
-      if(headerEl&&m&&m[1]!=="/dev/null"){ headerEl.firstChild.textContent=m[1]; } return; }
-    if(ln.startsWith("--- ")) return;
-    if(/^(index |old mode|new mode|new file|deleted file|similarity|rename |copy |Binary )/.test(ln)) return;
-    if(ln.startsWith("@@")){ if(!table) startFile("file");
-      const m=/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(ln); if(m){oldn=+m[1];newn=+m[2];}
-      hunk(ln); return; }
-    if(!table) return;
-    if(ln.startsWith("\\")){ row("dnl",null,null,ln); return; }   // \ No newline at end of file
-    if(ln.startsWith("+")){ adds++; row("dadd",null,newn++,ln); }
-    else if(ln.startsWith("-")){ dels++; row("ddel",oldn++,null,ln); }
-    else { row("",oldn++,newn++,ln); }                            // context
-  });
-  flush();
-  if(!table) scroll.appendChild(el("div",{class:"dmsg",text:"(empty diff)"}));
+  function draw(){clear(scroll);uni.className="dmode"+(_diffMode==="unified"?" on":"");spl.className="dmode"+(_diffMode==="split"?" on":"");
+    files.forEach(f=>scroll.appendChild(renderFile(f,_diffMode)));}
+  uni.addEventListener("click",()=>{_diffMode="unified";draw();});
+  spl.addEventListener("click",()=>{_diffMode="split";draw();});
+  container.appendChild(el("div",{class:"dtoolbar"},[uni,spl]));
   container.appendChild(scroll);
+  draw();
 }
 function diffChips(r){
   const out=[];
