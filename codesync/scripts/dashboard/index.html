@@ -811,7 +811,9 @@ function renderDocList(list){
   const upMsg=el("div",{style:"margin-top:6px"});
   upBtn.addEventListener("click",()=>fileIn.click());
   fileIn.addEventListener("change",()=>{ if(fileIn.files.length)uploadFiles(fileIn.files,upMsg); fileIn.value=""; });
-  box.appendChild(wrap);box.appendChild(add);box.appendChild(upBtn);box.appendChild(fileIn);box.appendChild(upMsg);
+  const gen=el("button",{class:"btn",style:"margin:10px 0 0 8px",text:"✨ Generate CLAUDE.md from code"});
+  gen.addEventListener("click",()=>generateDoc("CLAUDE.md",gen));
+  box.appendChild(wrap);box.appendChild(add);box.appendChild(upBtn);box.appendChild(gen);box.appendChild(fileIn);box.appendChild(upMsg);
 }
 function readAsB64(f){return new Promise((res,rej)=>{const r=new FileReader();
   r.onload=()=>res((String(r.result||"").split(",")[1])||"");r.onerror=rej;r.readAsDataURL(f);});}
@@ -831,23 +833,35 @@ function uploadFiles(files,msg){
     loadDocs();
   });
 }
+function renderDocEditor(name,content,note){
+  const ed=document.getElementById("doc-editor");clear(ed);
+  const ta=el("textarea",{class:"fin",rows:"16",style:"font-family:var(--mono);font-size:12.5px"});ta.value=content||"";
+  const save=el("button",{class:"btn primary",text:"Save"}),cancel=el("button",{class:"btn",text:"Close"});
+  const msg=el("div",{style:"margin-top:6px"});
+  save.addEventListener("click",()=>{save.disabled=true;save.textContent="Saving…";clear(msg);
+    post("/api/doc-save",{project:CURRENT,name:name,content:ta.value}).then(({body})=>{
+      save.disabled=false;save.textContent="Save";
+      if(body.ok){msg.appendChild(el("span",{class:"pill on",text:"saved ✓"}));loadDocs();}
+      else msg.appendChild(el("div",{class:"err",text:body.error||"save failed"}));});});
+  cancel.addEventListener("click",()=>clear(ed));
+  ed.appendChild(el("div",{class:"zlabel",style:"margin-top:14px",text:note||("Editing "+name)}));
+  if(note)ed.appendChild(el("div",{class:"hsub",text:"Review the generated draft, then Save to apply it as "+name+", or Close to discard."}));
+  ed.appendChild(ta);ed.appendChild(el("div",{class:"dobar"},[save,cancel]));ed.appendChild(msg);
+}
 function openDoc(name){
   const ed=document.getElementById("doc-editor");clear(ed);
   ed.appendChild(el("div",{class:"hint",style:"margin-top:12px",text:"loading "+name+"…"}));
-  api("/api/doc?project="+encodeURIComponent(CURRENT)+"&name="+encodeURIComponent(name)).then(d=>{
-    clear(ed);
-    const ta=el("textarea",{class:"fin",rows:"16",style:"font-family:var(--mono);font-size:12.5px"});ta.value=d.content||"";
-    const save=el("button",{class:"btn primary",text:"Save"}),cancel=el("button",{class:"btn",text:"Close"});
-    const msg=el("div",{style:"margin-top:6px"});
-    save.addEventListener("click",()=>{save.disabled=true;save.textContent="Saving…";clear(msg);
-      post("/api/doc-save",{project:CURRENT,name:name,content:ta.value}).then(({body})=>{
-        save.disabled=false;save.textContent="Save";
-        if(body.ok){msg.appendChild(el("span",{class:"pill on",text:"saved ✓"}));loadDocs();}
-        else msg.appendChild(el("div",{class:"err",text:body.error||"save failed"}));});});
-    cancel.addEventListener("click",()=>clear(ed));
-    ed.appendChild(el("div",{class:"zlabel",style:"margin-top:14px",text:"Editing "+name}));
-    ed.appendChild(ta);ed.appendChild(el("div",{class:"dobar"},[save,cancel]));ed.appendChild(msg);
-  }).catch(()=>{clear(ed);ed.appendChild(el("div",{class:"err",text:"could not open "+name}));});
+  api("/api/doc?project="+encodeURIComponent(CURRENT)+"&name="+encodeURIComponent(name))
+    .then(d=>renderDocEditor(name,d.content||""))
+    .catch(()=>{clear(ed);ed.appendChild(el("div",{class:"err",text:"could not open "+name}));});
+}
+function generateDoc(target,btn){
+  btn.disabled=true;btn.textContent="Generating "+target+"… (up to a minute)";
+  post("/api/generate-doc",{project:CURRENT,target:target}).then(({body})=>{
+    btn.disabled=false;btn.textContent="✨ Generate "+target+" from code";
+    if(body.ok&&body.draft)renderDocEditor(target,body.draft,"Generated "+target+" draft — review before saving");
+    else{const e=document.getElementById("doc-editor");clear(e);e.appendChild(el("div",{class:"err",style:"margin-top:12px",text:body.error||body.message||"generation failed"}));}
+  }).catch(()=>{btn.disabled=false;btn.textContent="✨ Generate "+target+" from code";});
 }
 function newDoc(){
   const ed=document.getElementById("doc-editor");clear(ed);

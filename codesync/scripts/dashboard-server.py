@@ -59,6 +59,7 @@ AUTONOMY_REVIEW = os.path.join(SCRIPT_DIR, "autonomy-review.sh").replace("\\", "
 AUTONOMY_DIFF = os.path.join(SCRIPT_DIR, "autonomy-diff.sh").replace("\\", "/")
 CREATE_PROJECT = os.path.join(SCRIPT_DIR, "create-project.sh").replace("\\", "/")
 CLONE_REPO = os.path.join(SCRIPT_DIR, "clone-repo.sh").replace("\\", "/")
+GENERATE_DOC = os.path.join(SCRIPT_DIR, "generate-doc.sh").replace("\\", "/")
 ROLES_JSON = os.path.join(SCRIPT_DIR, "lib", "roles.json")
 
 # ── Capability presets (control-panel Layer 2) ───────────────────────────────
@@ -326,6 +327,18 @@ class Handler(BaseHTTPRequestHandler):
             self._create_role(body)
             return
 
+        # generate-doc: draft CLAUDE.md/GUARDRAILS.md from the cloned code (the
+        # draft is returned for review in the editor; nothing is written here).
+        if u.path == "/api/generate-doc":
+            if not self._post_gate():
+                return
+            _touch()
+            body = self._read_json_body()
+            if body is None:
+                return
+            self._generate_doc(body)
+            return
+
         # clone-repo: clone the project's repo_url locally + set repo_path.
         if u.path == "/api/clone-repo":
             if not self._post_gate():
@@ -484,6 +497,40 @@ class Handler(BaseHTTPRequestHandler):
                 if key:
                     seeded[role] = key
         return {"project": project, "presets": presets, "seeded": seeded}
+
+    def _generate_doc(self, body):
+        """POST /api/generate-doc {project, target}. Runs a headless read-only
+        claude over the project's cloned code and returns the DRAFT markdown for
+        review in the editor — it writes nothing (the editor's Save is approval)."""
+        cfg = state.load_config(_ctx["config"])
+        project = self._require(body, "project", state._NAME_RE)
+        if project is None:
+            return
+        if not (cfg.get("projects") or {}).get(project):
+            self._json({"ok": False, "error": "unknown project"}, 400)
+            return
+        target = body.get("target") or "CLAUDE.md"
+        if target not in ("CLAUDE.md", "GUARDRAILS.md"):
+            self._json({"ok": False, "error": "unsupported target"}, 400)
+            return
+        rp = ((state.load_autonomy(_ctx["config_dir"]).get("projects", {})
+               .get(project, {})) or {}).get("repo_path", "")
+        if not rp or not os.path.isdir(rp):
+            self._json({"ok": False, "error": "clone the project's code first"}, 400)
+            return
+        try:
+            ok, out, err = self._run_bash([GENERATE_DOC, "--project", project,
+                                           "--target", target], timeout=240)
+        except subprocess.TimeoutExpired:
+            self._json({"ok": False, "error": "generation timed out"}, 504)
+            return
+        except Exception as e:
+            self._json({"ok": False, "error": f"{type(e).__name__}"}, 500)
+            return
+        if ok and out.strip():
+            self._json({"ok": True, "target": target, "draft": out})
+        else:
+            self._json({"ok": False, "error": (err or out or "generation failed")[-400:]}, 500)
 
     def _clone_repo(self, body):
         """POST /api/clone-repo {project, dir?}. Resolves repo_url from the synced

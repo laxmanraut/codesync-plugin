@@ -300,6 +300,14 @@ PY
     "$(cat "$HOME/.config/codesync/launch.log" 2>/dev/null)"
 fi
 
+# ── generate-doc (draft CLAUDE.md from code; review-gated via the editor) ──
+t_eq "generate-doc with ?t= but no header → 403" "403" \
+  "$(code -X POST -H "$J" -d '{"project":"testproj","target":"CLAUDE.md"}' "$B/api/generate-doc?t=$TOKEN")"
+t_eq "generate-doc unknown project → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"nope","target":"CLAUDE.md"}' "$B/api/generate-doc")"
+t_eq "generate-doc unsupported target → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","target":"x.sh"}' "$B/api/generate-doc")"
+
 # ── clone-repo / code-status ──
 t_eq "code-status WITHOUT token → 403" "403" "$(code "$B/api/code-status?project=testproj")"
 t_contains "code-status returns a cloned flag" '"cloned"' \
