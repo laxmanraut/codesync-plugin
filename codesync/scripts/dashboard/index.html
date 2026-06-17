@@ -93,9 +93,25 @@
   .b-todo{background:var(--accent-bg);color:var(--accent-ink)} .b-wip{background:rgba(245,180,85,.16);color:var(--warn)}
   .b-blocked{background:rgba(255,107,107,.16);color:var(--bad)} .b-note{background:rgba(255,255,255,.08);color:var(--dim)}
   .b-done{background:rgba(70,201,127,.14);color:var(--ok)} .b-auto{background:rgba(52,224,255,.14);color:var(--cyan)}
-  .diff{display:none;margin-top:11px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  /* GitHub-style unified diff */
+  .diff{display:none;margin-top:11px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#0a0c16}
   .diff.open{display:block}
-  .diff pre{margin:0;padding:12px 13px;font-family:var(--mono);font-size:12.5px;line-height:1.5;overflow:auto;max-height:340px;background:#0a0c16;color:#c8ccda;white-space:pre}
+  .dscroll{max-height:380px;overflow:auto}
+  .dmsg{padding:12px 13px;font-size:13px;color:var(--muted)}
+  .dfile-h{display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.045);
+    border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--dim);
+    position:sticky;top:0;z-index:1}
+  .dfile-h .cnt{margin-left:auto;font-size:11px;font-weight:700}
+  .dfile-h .add{color:var(--ok)} .dfile-h .del{color:var(--bad)}
+  .dtable{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12px;line-height:1.55;table-layout:auto}
+  .dtable td{padding:0}
+  .dgut{width:1%;min-width:38px;text-align:right;padding:0 9px;color:#5b6270;user-select:none;
+    white-space:nowrap;border-right:1px solid rgba(255,255,255,.06);vertical-align:top}
+  .dcode{padding:0 12px;white-space:pre-wrap;word-break:break-word;color:#c8ccda;width:100%;vertical-align:top;tab-size:4}
+  tr.dadd .dcode{background:rgba(46,160,67,.16)} tr.dadd .dgut{background:rgba(46,160,67,.24);color:#7ee0a0}
+  tr.ddel .dcode{background:rgba(248,81,73,.15)} tr.ddel .dgut{background:rgba(248,81,73,.24);color:#ff9b95}
+  tr.dhunk td{background:rgba(56,139,253,.13);color:#7d8bb5;padding:2px 12px;font-size:11.5px}
+  tr.dnl .dcode{color:#5b6270;font-style:italic}
 
   .calm{text-align:center;padding:38px 20px;border:1px dashed var(--border);border-radius:16px;background:var(--card)}
   .calm .big{font-size:19px;font-weight:650} .calm .small{color:var(--muted);margin-top:7px}
@@ -274,6 +290,45 @@ function renderProjects(o){
 }
 
 // ── NEEDS YOU (unified queue) ──
+// Parse a unified `git diff` into a GitHub-style table: per-file header with
+// +/- counts, two line-number gutters (old | new), color-coded add/del/context
+// rows. All cell text is set via textContent (el's "text"), so agent/peer diff
+// content can never inject HTML.
+function renderDiff(container,text){
+  clear(container);
+  const scroll=el("div",{class:"dscroll"});
+  let table=null,headerEl=null,oldn=0,newn=0,adds=0,dels=0;
+  function flush(){ if(headerEl){const c=headerEl.querySelector(".cnt");clear(c);
+    c.appendChild(el("span",{class:"add",text:"+"+adds}));c.appendChild(document.createTextNode("  "));
+    c.appendChild(el("span",{class:"del",text:"−"+dels}));} }
+  function startFile(name){ flush(); adds=0;dels=0;
+    headerEl=el("div",{class:"dfile-h"},[el("span",{text:name||"file"}),el("span",{class:"cnt"})]);
+    scroll.appendChild(headerEl);
+    table=el("table",{class:"dtable"}); scroll.appendChild(table); }
+  function row(cls,o,n,t){ const tr=el("tr",cls?{class:cls}:null,[
+    el("td",{class:"dgut",text:o==null?"":String(o)}),
+    el("td",{class:"dgut",text:n==null?"":String(n)}),
+    el("td",{class:"dcode",text:t})]); table.appendChild(tr); }
+  function hunk(t){ const tr=el("tr",{class:"dhunk"},[el("td",{colspan:"2"}),el("td",{class:"dcode",text:t})]); table.appendChild(tr); }
+  (text||"").split("\n").forEach(ln=>{
+    if(ln.startsWith("diff --git")){ const m=/ b\/(.+)$/.exec(ln); startFile(m?m[1]:"file"); return; }
+    if(ln.startsWith("+++ ")){ const m=/^\+\+\+ (?:b\/)?(.+)/.exec(ln);
+      if(headerEl&&m&&m[1]!=="/dev/null"){ headerEl.firstChild.textContent=m[1]; } return; }
+    if(ln.startsWith("--- ")) return;
+    if(/^(index |old mode|new mode|new file|deleted file|similarity|rename |copy |Binary )/.test(ln)) return;
+    if(ln.startsWith("@@")){ if(!table) startFile("file");
+      const m=/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(ln); if(m){oldn=+m[1];newn=+m[2];}
+      hunk(ln); return; }
+    if(!table) return;
+    if(ln.startsWith("\\")){ row("dnl",null,null,ln); return; }   // \ No newline at end of file
+    if(ln.startsWith("+")){ adds++; row("dadd",null,newn++,ln); }
+    else if(ln.startsWith("-")){ dels++; row("ddel",oldn++,null,ln); }
+    else { row("",oldn++,newn++,ln); }                            // context
+  });
+  flush();
+  if(!table) scroll.appendChild(el("div",{class:"dmsg",text:"(empty diff)"}));
+  container.appendChild(scroll);
+}
 function diffChips(r){
   const out=[];
   const m=/(\d+)\s+file/.exec(r.diffstat||"");if(m)out.push({t:m[1]+" file"+(m[1]==="1"?"":"s"),c:"ok"});
@@ -286,18 +341,20 @@ function reviewCard(r){
   const blocked=r.status==="blocked";
   const d=el("div",{class:"decision",id:"need-rev-"+r.id});
   const chips=el("div",{class:"chips"});diffChips(r).forEach(c=>chips.appendChild(el("span",{class:"chip "+(c.c||""),text:c.t})));
-  const diffBox=el("pre");const diffWrap=el("div",{class:"diff"});diffWrap.appendChild(diffBox);
+  const diffWrap=el("div",{class:"diff"});
   const okBtn=el("button",{class:"btn primary",text:"Approve ▸"});
   const hint=el("span",{class:"hint",text:"view the diff to approve"});
   if(!VIEWED.has(r.id)&&!blocked)okBtn.disabled=true;
   const viewLink=el("button",{class:"link",text:"view diff ▾"});
   viewLink.addEventListener("click",()=>{
-    if(diffWrap.classList.contains("open")){diffWrap.classList.remove("open");return;}
-    diffWrap.classList.add("open");diffBox.textContent="loading…";
+    if(diffWrap.classList.contains("open")){diffWrap.classList.remove("open");viewLink.textContent="view diff ▾";return;}
+    diffWrap.classList.add("open");viewLink.textContent="hide diff ▴";
+    clear(diffWrap);diffWrap.appendChild(el("div",{class:"dmsg",text:"loading…"}));
     VIEWED.add(r.id);if(!blocked){okBtn.disabled=false;hint.style.display="none";}
     api("/api/review-diff?project="+encodeURIComponent(CURRENT)+"&id="+encodeURIComponent(r.id))
-      .then(x=>{diffBox.textContent=(x.diff&&x.diff.trim())?x.diff:(x.error||"(no diff)");})
-      .catch(()=>{diffBox.textContent="(failed to load diff)";});});
+      .then(x=>{ if(x.diff&&x.diff.trim()) renderDiff(diffWrap,x.diff);
+        else { clear(diffWrap); diffWrap.appendChild(el("div",{class:"dmsg",text:x.error||"(no diff)"})); } })
+      .catch(()=>{ clear(diffWrap); diffWrap.appendChild(el("div",{class:"dmsg",text:"(failed to load diff)"})); });});
   const actions=el("div",{class:"actions"},[viewLink,el("span",{class:"grow"})]);
   if(blocked){actions.appendChild(el("span",{class:"badge b-blocked",text:"blocked"}));}
   else{actions.appendChild(hint);}
