@@ -199,6 +199,8 @@
   <!-- DETAIL VIEW -->
   <section id="view-detail" style="display:none">
 
+    <div id="code-banner" style="display:none"></div>
+
     <section class="zone">
       <div class="zlabel">Needs your decision <span class="n" id="c-need" style="display:none"></span></div>
       <div id="needs"><div class="empty">…</div></div>
@@ -269,7 +271,8 @@ function showDetail(n){VIEW="detail";CURRENT=n;HEALTH_OPEN=false;VIEWED.clear();
   document.getElementById("health-sum").classList.remove("open");
   ["needs","happening","do"].forEach(id=>{const b=document.getElementById(id);clear(b);b.appendChild(el("div",{class:"empty",text:"…"}));});
   _nySig=null;document.getElementById("needs").dataset.built="";   // force a fresh build for the new project
-  _launchFor="";_docsFor="";
+  _launchFor="";_docsFor="";_codeFor="";
+  clear(document.getElementById("code-banner"));
   clear(document.getElementById("doc-editor"));
   document.getElementById("docs-list").appendChild(el("div",{class:"empty",text:"…"}));
   refresh();}
@@ -749,6 +752,35 @@ function submitRole(name,owns,notowns,msg,go,confirm){
   }).catch(()=>{go.disabled=false;go.textContent="Create + launch";msg.appendChild(el("div",{class:"err",text:"create failed"}));});
 }
 
+// ── clone-the-code banner (shown when a project has a repo_url but no local clone) ──
+let _codeFor="";
+function loadCode(){ api("/api/code-status?project="+encodeURIComponent(CURRENT)).then(renderCode).catch(()=>{}); }
+function renderCode(s){
+  const box=document.getElementById("code-banner");clear(box);
+  if(!s.repo_url){box.style.display="none";return;}
+  box.style.display="";
+  if(s.cloned){
+    box.appendChild(el("div",{class:"hsub",style:"margin:18px 0 0",text:"📦 Code cloned at "+s.repo_path}));
+    return;
+  }
+  const dir=el("input",{class:"fin",value:s.default_dir||""});
+  const go=el("button",{class:"btn primary",text:"Clone the code"});
+  const msg=el("div",{style:"margin-top:6px"});
+  go.addEventListener("click",()=>{go.disabled=true;go.textContent="Cloning… (may take a moment)";clear(msg);
+    post("/api/clone-repo",{project:CURRENT,dir:dir.value}).then(({body})=>{
+      go.disabled=false;go.textContent="Clone the code";
+      if(body.ok){loadCode();} else msg.appendChild(el("div",{class:"err",text:body.error||body.message||"clone failed"}));
+    }).catch(()=>{go.disabled=false;go.textContent="Clone the code";msg.appendChild(el("div",{class:"err",text:"clone failed"}));});});
+  box.appendChild(el("div",{class:"decision",style:"margin-top:18px"},[
+    el("div",{class:"drow"},[el("div",{class:"ic",text:"📦"}),
+      el("div",{class:"dbody"},[
+        el("div",{class:"dtitle",text:"This project has code to clone"}),
+        el("div",{class:"dsub",text:s.repo_url+" — clone it locally to work on it (uses your own git access)."}),
+        dir,
+        el("div",{class:"actions"},[el("span",{class:"grow"}),go]),
+        msg])])]));
+}
+
 // ── project rules & docs editor ──
 let _docsFor="";
 function loadDocs(){ api("/api/docs?project="+encodeURIComponent(CURRENT)).then(d=>renderDocList(d.docs||[])).catch(()=>{}); }
@@ -826,6 +858,7 @@ function refresh(){
       renderNeedsYou();renderHappening();renderHealth();renderGlance();}).catch(()=>{});
     renderDo();
     if(_docsFor!==CURRENT){_docsFor=CURRENT;loadDocs();}   // load once per project (not every poll, so an open editor isn't clobbered)
+    if(_codeFor!==CURRENT){_codeFor=CURRENT;loadCode();}   // clone-the-code banner, once per project
   } else { api("/api/pending").then(d=>{NY.pending=d.pending||[];}).catch(()=>{}); }
   renderGlance();
 }

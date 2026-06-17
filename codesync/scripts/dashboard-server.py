@@ -57,6 +57,7 @@ REGISTER_ROLE = os.path.join(SCRIPT_DIR, "register-role-in-config.sh").replace("
 AUTONOMY_REVIEW = os.path.join(SCRIPT_DIR, "autonomy-review.sh").replace("\\", "/")
 AUTONOMY_DIFF = os.path.join(SCRIPT_DIR, "autonomy-diff.sh").replace("\\", "/")
 CREATE_PROJECT = os.path.join(SCRIPT_DIR, "create-project.sh").replace("\\", "/")
+CLONE_REPO = os.path.join(SCRIPT_DIR, "clone-repo.sh").replace("\\", "/")
 ROLES_JSON = os.path.join(SCRIPT_DIR, "lib", "roles.json")
 
 # ── Capability presets (control-panel Layer 2) ───────────────────────────────
@@ -227,6 +228,15 @@ class Handler(BaseHTTPRequestHandler):
                                 "error": "" if ok else err[-300:]})
                 except Exception as e:
                     self._json({"ok": False, "error": f"{type(e).__name__}"}, 500)
+        elif u.path == "/api/code-status":
+            proj = (cfg.get("projects") or {}).get(project) or {}
+            pp = proj.get("path", "")
+            man = state.read_project_manifest(pp) if pp else {}
+            rp = ((state.load_autonomy(_ctx["config_dir"]).get("projects", {})
+                   .get(project, {})) or {}).get("repo_path", "")
+            self._json({"project": project, "repo_url": man.get("repo_url", ""),
+                        "repo_path": rp, "cloned": bool(rp and os.path.isdir(rp)),
+                        "default_dir": os.path.join(os.path.expanduser("~"), "codesync-code", project)})
         elif u.path == "/api/docs":
             pp = ((cfg.get("projects") or {}).get(project) or {}).get("path", "")
             self._json({"project": project,
@@ -310,6 +320,17 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return
             self._create_role(body)
+            return
+
+        # clone-repo: clone the project's repo_url locally + set repo_path.
+        if u.path == "/api/clone-repo":
+            if not self._post_gate():
+                return
+            _touch()
+            body = self._read_json_body()
+            if body is None:
+                return
+            self._clone_repo(body)
             return
 
         # create-project: new synced project (+ Syncthing folder) + repo_url manifest.
@@ -440,6 +461,39 @@ class Handler(BaseHTTPRequestHandler):
                 if key:
                     seeded[role] = key
         return {"project": project, "presets": presets, "seeded": seeded}
+
+    def _clone_repo(self, body):
+        """POST /api/clone-repo {project, dir?}. Resolves repo_url from the synced
+        manifest, then runs clone-repo.sh (git clone → set repo_path), which
+        asserts the clone dir is OUTSIDE every synced folder. Uses the caller's
+        own git auth; clone-repo.sh fails fast (no prompt) if access is missing."""
+        cfg = state.load_config(_ctx["config"])
+        project = self._require(body, "project", state._NAME_RE)
+        if project is None:
+            return
+        proj = (cfg.get("projects") or {}).get(project)
+        if not proj:
+            self._json({"ok": False, "error": "unknown project"}, 400)
+            return
+        man = state.read_project_manifest(proj.get("path", "")) if proj.get("path") else {}
+        url = man.get("repo_url", "")
+        if not url or not state.valid_repo_url(url):
+            self._json({"ok": False, "error": "this project has no valid repo_url set"}, 400)
+            return
+        argv = [CLONE_REPO, "--project", project, "--url", url]
+        d = body.get("dir")
+        if isinstance(d, str) and d.strip():
+            argv += ["--dir", d.strip()]
+        try:
+            ok, out, err = self._run_bash(argv, timeout=180)
+        except subprocess.TimeoutExpired:
+            self._json({"ok": False, "error": "clone timed out"}, 504)
+            return
+        except Exception as e:
+            self._json({"ok": False, "error": f"{type(e).__name__}"}, 500)
+            return
+        self._json({"ok": ok, "project": project,
+                    "message": (out if ok else (err or out))[-500:]}, 200 if ok else 500)
 
     def _create_project(self, body):
         """POST /api/create-project {name, repo_url?}. Validates name (_NAME_RE,

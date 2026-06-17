@@ -270,6 +270,15 @@ t_refute  "_docs/notes.md is gone" test -f "$PROJ/_docs/notes.md"
 DC=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"CLAUDE.md"}' "$B/api/doc-delete")
 t_contains "CLAUDE.md delete is refused" "can't be deleted" "$DC"
 
+# ── clone-repo / code-status ──
+t_eq "code-status WITHOUT token → 403" "403" "$(code "$B/api/code-status?project=testproj")"
+t_contains "code-status returns a cloned flag" '"cloned"' \
+  "$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/code-status?project=testproj")"
+t_eq "clone-repo with ?t= but no header → 403" "403" \
+  "$(code -X POST -H "$J" -d '{"project":"testproj"}' "$B/api/clone-repo?t=$TOKEN")"
+t_eq "clone-repo for a project with no repo_url → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj"}' "$B/api/clone-repo")"
+
 # ── create-project (validation + gate; full creation needs live Syncthing) ──
 t_eq "create-project with ?t= but no header → 403" "403" \
   "$(code -X POST -H "$J" -d '{"name":"newproj"}' "$B/api/create-project?t=$TOKEN")"

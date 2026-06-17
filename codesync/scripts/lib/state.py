@@ -1018,7 +1018,7 @@ def delete_project_doc(proj_path, name):
 # A project's _project.json travels in the synced folder, so every peer who
 # joins gets the repo_url and can clone the code locally (Increment 2). repo_url
 # is validated conservatively because it is later handed to `git clone`.
-_REPO_URL_RE = re.compile(r'^(https?://|git@[\w.-]+:|ssh://|git://)[\w.@:/~%+\-]+$')
+_REPO_URL_RE = re.compile(r'^(https?://|git@[\w.-]+:|ssh://|git://|file://)[\w.@:/~%+\-]+$')
 
 
 def valid_repo_url(url):
