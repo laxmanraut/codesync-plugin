@@ -75,6 +75,29 @@ print("OK" if ok else "ERR " + e)
 PY
 )
 case "$OUT" in
-  OK) printf 'CLONED\t%s\n' "$DIR" ;;
+  OK) : ;;
   *)  err "${OUT#ERR }" ;;
 esac
+
+# Make agents LAUNCHED in this clone auto-load the synced project rules WITHOUT
+# touching the repo's tracked files: an untracked CLAUDE.local.md (Claude Code
+# loads it alongside the repo's own CLAUDE.md) that @-imports the synced
+# GUARDRAILS.md by absolute path, plus a local-only git exclude so it never
+# shows up in git status or a commit.
+SYNCED=$(codesync_python -c 'import json,sys
+print((json.load(open(sys.argv[1])).get("projects",{}).get(sys.argv[2],{}) or {}).get("path",""))' "$CFG_FILE" "$PROJECT")
+if [ -n "$SYNCED" ]; then
+  LOCAL="$DIR/CLAUDE.local.md"
+  if [ ! -f "$LOCAL" ]; then
+    {
+      printf '# codesync project "%s" — team rules (synced)\n\n' "$PROJECT"
+      printf 'Project rules (BINDING — always follow): @%s/GUARDRAILS.md\n\n' "$SYNCED"
+      printf 'Coordination (inbox, roles, docs) lives in: %s\n' "$SYNCED"
+    } > "$LOCAL"
+  fi
+  EX="$DIR/.git/info/exclude"
+  if [ -f "$EX" ] && ! grep -qxF "CLAUDE.local.md" "$EX" 2>/dev/null; then
+    printf 'CLAUDE.local.md\n' >> "$EX"
+  fi
+fi
+printf 'CLONED\t%s\n' "$DIR"

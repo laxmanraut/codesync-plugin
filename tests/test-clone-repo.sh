@@ -27,6 +27,13 @@ PY
 )
 t_assert "repo_path was recorded as a git repo" test -d "$RP/.git"
 
+# launched-in-clone agents auto-load the synced rules via an untracked,
+# git-excluded CLAUDE.local.md that @-imports the synced GUARDRAILS.md.
+t_assert  "clone has a CLAUDE.local.md"               test -f "$CLONE/CLAUDE.local.md"
+t_contains "CLAUDE.local.md @-imports synced GUARDRAILS" "@$PROJ/GUARDRAILS.md" "$(cat "$CLONE/CLAUDE.local.md")"
+t_contains "CLAUDE.local.md is git-excluded"          "CLAUDE.local.md" "$(cat "$CLONE/.git/info/exclude" 2>/dev/null)"
+t_refute  "git status does NOT show CLAUDE.local.md"  sh -c "git -C '$CLONE' status --porcelain | grep -q CLAUDE.local.md"
+
 # SECURITY: a clone dir inside the synced project folder is refused.
 OUT2=$(bash "$SCRIPTS/clone-repo.sh" --project testproj --url "$URL" --dir "$PROJ/sub/clone" 2>&1)
 t_contains "clone into a synced folder is refused" "OUTSIDE every synced" "$OUT2"
