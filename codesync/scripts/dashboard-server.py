@@ -425,7 +425,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": "unknown capability"}, 400)
                 return
             allowed = _CAPABILITY_PRESETS[cap]
-        argv = [LAUNCH_AGENT, "--project", project, "--role", role, "--path", path]
+        # Open in the project's cloned code repo when one is set (so the agent
+        # works on the code); fall back to the synced coordination folder.
+        launch_path, opened_in = path, "project"
+        rp = ((state.load_autonomy(_ctx["config_dir"]).get("projects", {})
+               .get(project, {})) or {}).get("repo_path", "")
+        if rp and os.path.isdir(rp):
+            launch_path, opened_in = rp, "code"
+        argv = [LAUNCH_AGENT, "--project", project, "--role", role, "--path", launch_path]
         if allowed:
             argv += ["--allowed-tools", allowed]
         try:
@@ -441,6 +448,7 @@ class Handler(BaseHTTPRequestHandler):
         copy = out.split("\t", 1)[1] if out.startswith("COPY\t") else ""
         self._json({"ok": ok, "launched": launched, "copy": copy,
                     "project": project, "role": role, "capability": cap or "",
+                    "opened_in": opened_in, "path": launch_path,
                     "message": (out if ok else err)[-500:]}, 200 if ok else 500)
 
     def _launch_options(self, cfg, project):

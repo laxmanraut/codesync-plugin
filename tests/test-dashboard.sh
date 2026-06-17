@@ -270,6 +270,19 @@ t_refute  "_docs/notes.md is gone" test -f "$PROJ/_docs/notes.md"
 DC=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"CLAUDE.md"}' "$B/api/doc-delete")
 t_contains "CLAUDE.md delete is refused" "can't be deleted" "$DC"
 
+# ── launch opens in the cloned repo (repo_path) when one is set ──
+if command -v git >/dev/null 2>&1; then
+  mkdir -p "$T_TMP/code-clone"; LCLONE=$(cd "$T_TMP/code-clone" && pwd)   # normalised (matches abspath stored by set_autonomy_repo)
+  ( cd "$LCLONE" && git init -q && git config user.email t@t && git config user.name t )
+  $PY_BIN - "$SCRIPTS/lib" "$HOME/.config/codesync" "$HOME/.config/codesync/config.json" "$LCLONE" <<'PY'
+import sys; lib,cd,cfgf,clone=sys.argv[1:5]; sys.path.insert(0,lib); import state
+cfg=state.load_config(cfgf); ok,e=state.set_autonomy_repo(cd,"testproj",clone,cfg); assert ok,e
+PY
+  curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d "$LB" "$B/api/launch-agent" >/dev/null
+  t_contains "launch cd's into the cloned repo when repo_path is set" "cd $LCLONE" \
+    "$(cat "$HOME/.config/codesync/launch.log" 2>/dev/null)"
+fi
+
 # ── clone-repo / code-status ──
 t_eq "code-status WITHOUT token → 403" "403" "$(code "$B/api/code-status?project=testproj")"
 t_contains "code-status returns a cloned flag" '"cloned"' \

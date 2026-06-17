@@ -693,7 +693,7 @@ let _launchFor="";
 function launchInto(role,into,cap){
   clear(into);into.appendChild(el("span",{class:"hint",text:"launching…"}));
   post("/api/launch-agent",{project:CURRENT,role:role,capability:cap||""}).then(({body})=>{clear(into);
-    if(body.launched)into.appendChild(el("span",{class:"pill on",text:"launched ✓"}));
+    if(body.launched)into.appendChild(el("span",{class:"pill on",text:"launched ✓"+(body.opened_in==="code"?" · in code":"")}));
     else if(body.copy){into.appendChild(el("div",{class:"hint",text:"Couldn't auto-open a terminal — run this:"}));
       const cp=el("button",{class:"btn",text:"Copy"});cp.addEventListener("click",()=>navigator.clipboard&&navigator.clipboard.writeText(body.copy).then(()=>cp.textContent="Copied"));
       into.appendChild(el("div",{class:"did",text:body.copy}));into.appendChild(cp);}
