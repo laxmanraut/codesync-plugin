@@ -225,6 +225,7 @@ function showDetail(n){VIEW="detail";CURRENT=n;HEALTH_OPEN=false;VIEWED.clear();
   document.getElementById("health-body").classList.remove("open");
   document.getElementById("health-sum").classList.remove("open");
   ["needs","happening","do"].forEach(id=>{const b=document.getElementById(id);clear(b);b.appendChild(el("div",{class:"empty",text:"…"}));});
+  _nySig=null;document.getElementById("needs").dataset.built="";   // force a fresh build for the new project
   _launchFor="";
   refresh();}
 document.getElementById("g-projbtn").addEventListener("click",showList);
@@ -342,8 +343,26 @@ function conflictCard(c){
       el("div",{class:"dsub"},[el("span",{class:"mono",text:c.rel}),document.createTextNode(" · "+c.age+" — open both, merge by hand, delete the .sync-conflict- copy")])])]));
   return d;
 }
+// Signature of the queue's IDENTITY (not volatile fields like age). The 4s poll
+// fires several fetches that each call renderNeedsYou(); rebuilding every time
+// would wipe transient UI state — e.g. an open diff. So only rebuild when an
+// item is actually added/removed or its status changes; otherwise leave the DOM
+// (and your open diff) alone.
+let _nySig=null;
+function nySig(){
+  return JSON.stringify([
+    NY.pending.map(p=>p.id),
+    NY.reviews.map(r=>r.id+":"+r.status),
+    NY.waiting.map(t=>(t.title||"")+":"+(t.role||"")+":"+(t.status||"")),
+    NY.conflicts.map(c=>c.rel),
+  ]);
+}
 function renderNeedsYou(){
-  const box=document.getElementById("needs");clear(box);
+  const box=document.getElementById("needs");
+  const sig=nySig();
+  if(sig===_nySig && box.dataset.built==="1") return;   // unchanged → keep the DOM (preserves an open diff)
+  _nySig=sig; box.dataset.built="1";
+  clear(box);
   const total=NY.pending.length+NY.reviews.length+NY.waiting.length+NY.conflicts.length;
   const c=document.getElementById("c-need");c.style.display=total?"":"none";c.textContent=total;
   if(!total){box.appendChild(el("div",{class:"calm"},[
