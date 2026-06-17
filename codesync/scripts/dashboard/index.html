@@ -6,697 +6,520 @@
 <title>codesync dashboard</title>
 <style>
   :root{
-    --bg:#07080f; --card:rgba(255,255,255,.04); --border:rgba(255,255,255,.10);
-    --text:#eceeff; --dim:#aeb4ce; --muted:#7c83a0;
-    --accent:#7c83ff; --cyan:#34e0ff; --ok:#38e8a8; --warn:#ffce5a; --bad:#ff6b6b;
+    --bg:#07080f; --card:rgba(255,255,255,.035); --card-hi:rgba(255,255,255,.06);
+    --border:rgba(255,255,255,.10); --text:#eceeff; --dim:#aeb4ce; --muted:#7c83a0; --faint:#5b5f72;
+    --accent:#8b7cff; --accent-ink:#cfc7ff; --accent-bg:rgba(139,124,255,.14);
+    --cyan:#34e0ff; --ok:#46c97f; --warn:#f5b455; --bad:#ff6b6b;
     --grad:linear-gradient(120deg,#6366f1,#b06bff,#34e0ff);
     --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 var(--sans);
+    -webkit-font-smoothing:antialiased;padding-bottom:60px}
   body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
-    background:radial-gradient(50vw 40vw at 15% 0%,rgba(99,102,241,.18),transparent 60%),
-      radial-gradient(45vw 40vw at 90% 10%,rgba(176,107,255,.14),transparent 60%)}
-  .wrap{max-width:1080px;margin:0 auto;padding:28px 24px 64px}
-  header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:8px}
-  .brand{display:flex;align-items:center;gap:11px;font-weight:800;font-size:20px;letter-spacing:-.02em}
-  .brand .glyph{width:30px;height:30px;border-radius:9px;background:var(--grad);
-    display:grid;place-items:center;color:#fff;font-weight:800}
-  .meta{font-size:12.5px;color:var(--muted);text-align:right}
-  .meta .id{font-family:var(--mono);font-size:11px}
-  .st{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
-  .dot.ok{background:var(--ok);box-shadow:0 0 8px rgba(56,232,168,.7)}
-  .dot.bad{background:var(--bad)}
-  .crumbs{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0 20px;font-size:14px}
-  .crumbs a{color:var(--accent);cursor:pointer;text-decoration:none;font-weight:600}
-  .crumbs a:hover{text-decoration:underline}
-  .crumbs .sep{color:var(--muted)}
-  .crumbs .here{font-weight:700}
-  .upd{font-size:11.5px;color:var(--muted);margin-left:auto}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  @media(max-width:760px){.grid{grid-template-columns:1fr}}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;
-    padding:18px 18px 14px;position:relative;overflow:hidden}
-  .card::before{content:"";position:absolute;inset:0 0 auto 0;height:1px;
-    background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent)}
-  .card.span{grid-column:1/-1}
-  h2{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;
-    font-weight:800;color:var(--accent);display:flex;align-items:center;gap:8px}
-  h2 .count{color:var(--muted);font-weight:700}
-  .empty{color:var(--muted);font-size:13px;padding:6px 0}
-  .row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid rgba(255,255,255,.06)}
-  .row:first-of-type{border-top:0}
-  .row .main{flex:1;min-width:0}
-  .row .title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .row .sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .row .sub .mono{font-family:var(--mono);font-size:11px}
-  /* clickable project rows */
-  .prow{display:flex;align-items:center;gap:12px;padding:14px 14px;margin:8px 0;
-    border:1px solid var(--border);border-radius:13px;background:rgba(255,255,255,.025);
-    cursor:pointer;transition:transform .18s,border-color .2s,background .2s}
-  .prow:hover{transform:translateX(3px);border-color:var(--accent);background:rgba(124,131,255,.08)}
-  .prow .pname{font-weight:800;font-size:16px;letter-spacing:-.01em}
+    background:radial-gradient(50vw 40vw at 15% 0%,rgba(99,102,241,.16),transparent 60%),
+      radial-gradient(45vw 40vw at 90% 8%,rgba(176,107,255,.12),transparent 60%)}
+  .wrap{max-width:920px;margin:0 auto;padding:0 22px}
+  .mono{font-family:var(--mono)}
+
+  /* ── glance bar ── */
+  header{position:sticky;top:0;z-index:6;backdrop-filter:blur(12px);
+    background:rgba(7,8,15,.74);border-bottom:1px solid var(--border)}
+  .glance{display:flex;align-items:center;gap:16px;padding:13px 0;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:18px;letter-spacing:-.02em}
+  .brand .glyph{width:27px;height:27px;border-radius:8px;background:var(--grad);display:grid;place-items:center;color:#fff;font-weight:800;font-size:14px}
+  .proj{display:flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--border);
+    border-radius:9px;background:var(--card);font-weight:650;cursor:pointer}
+  .proj:hover{border-color:var(--accent)}
+  .proj .chev{color:var(--faint);font-size:12px}
+  .stat{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--muted)}
+  .stat b{font-weight:700}
+  .stat.need b{color:var(--accent-ink)} .stat.work b{color:var(--text)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+  .dot.ok{background:var(--ok);box-shadow:0 0 0 3px rgba(70,201,127,.16)}
+  .dot.warn{background:var(--warn);box-shadow:0 0 0 3px rgba(245,180,85,.16)}
+  .dot.bad{background:var(--bad);box-shadow:0 0 0 3px rgba(255,107,107,.16)}
+  .spacer{margin-left:auto}
+  .who{color:var(--faint);font-size:12px}
+
+  .zone{margin-top:26px}
+  .zlabel{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    font-weight:700;margin:0 0 12px 2px;display:flex;align-items:center;gap:9px}
+  .zlabel .n{background:var(--accent-bg);color:var(--accent-ink);border-radius:20px;padding:1px 9px;font-size:11px;letter-spacing:.04em}
+  .empty{color:var(--muted);font-size:13.5px;padding:4px 2px}
+
+  /* projects list */
+  .prow{display:flex;align-items:center;gap:12px;padding:14px;margin:10px 0;border:1px solid var(--border);
+    border-radius:13px;background:var(--card);cursor:pointer;transition:.18s}
+  .prow:hover{transform:translateX(3px);border-color:var(--accent);background:var(--accent-bg)}
+  .prow .pname{font-weight:800;font-size:16px}
   .prow .ppath{font-size:11.5px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .prow .pmeta{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
   .prow .chev{color:var(--muted);font-size:18px}
-  .tag{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
-    padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.08);color:var(--dim);white-space:nowrap}
-  .tag.warn{background:rgba(255,206,90,.16);color:var(--warn)}
-  /* agents */
-  .agent{display:flex;align-items:center;gap:11px;padding:11px 0;border-top:1px solid rgba(255,255,255,.06)}
-  .agent:first-of-type{border-top:0}
-  .agent .av{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-weight:800;font-size:13px;flex-shrink:0;
-    background:rgba(124,131,255,.16);color:#bcc0ff}
-  .agent.self .av{background:var(--grad);color:#fff}
-  .agent .main{flex:1;min-width:0}
-  .agent .nm{font-weight:700}
-  .agent .sub{font-size:12px;color:var(--muted)}
-  .agent .sub .mono{font-family:var(--mono);font-size:11px}
-  .pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap}
-  .pill.on{background:rgba(56,232,168,.14);color:var(--ok)}
-  .pill.off{background:rgba(255,255,255,.07);color:var(--muted)}
-  .pill.you{background:rgba(124,131,255,.16);color:#bcc0ff}
+  .tag{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.08);color:var(--dim);white-space:nowrap}
+  .tag.warn{background:rgba(245,180,85,.16);color:var(--warn)}
+
+  /* NEEDS YOU — loud decision cards */
+  .decision{background:var(--card-hi);border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:14px;padding:15px 17px;margin-bottom:11px;transition:.25s ease}
+  .decision:hover{background:rgba(255,255,255,.075)}
+  .decision.info{border-left-color:var(--muted);background:var(--card)}
+  .decision.gone{opacity:0;transform:translateX(40px);max-height:0;padding:0;margin:0;border:0;overflow:hidden}
+  .drow{display:flex;gap:13px;align-items:flex-start}
+  .ic{flex:0 0 36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:17px;background:var(--accent-bg)}
+  .ic.pair{background:rgba(70,201,127,.14)} .ic.reply{background:rgba(245,180,85,.14)} .ic.conflict{background:rgba(255,107,107,.14)}
+  .dbody{flex:1;min-width:0}
+  .dtitle{font-weight:650;font-size:15px}
+  .dsub{color:var(--muted);font-size:13px;margin-top:3px;word-break:break-word}
+  .did{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:5px;word-break:break-all}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{font-size:11.5px;padding:3px 9px;border-radius:7px;border:1px solid var(--border);color:var(--muted);background:rgba(255,255,255,.02)}
+  .chip.ok{color:var(--ok);border-color:rgba(70,201,127,.3)}
+  .chip.warn{color:var(--warn);border-color:rgba(245,180,85,.32)}
+  .actions{display:flex;gap:9px;align-items:center;margin-top:13px}
+  .grow{flex:1}
+  .hint{font-size:12px;color:var(--faint)}
+  .link{color:var(--accent-ink);font-size:13px;cursor:pointer;border:0;background:none;padding:6px 0;font-family:inherit}
+  .link:hover{text-decoration:underline}
+  .btn{font:inherit;font-size:13.5px;font-weight:650;padding:8px 15px;border-radius:9px;cursor:pointer;
+    border:1px solid var(--border);background:var(--card);color:var(--text);transition:.15s}
+  .btn:hover{background:var(--card-hi)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#15101f}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.primary[disabled]{opacity:.4;cursor:not-allowed;filter:none}
+  .btn.ghostred:hover{border-color:rgba(255,107,107,.5);color:var(--bad);background:rgba(255,107,107,.08)}
   .badge{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:3px 8px;border-radius:999px;white-space:nowrap}
-  .b-todo{background:rgba(124,131,255,.18);color:#bcc0ff}.b-wip{background:rgba(255,206,90,.16);color:var(--warn)}
-  .b-blocked{background:rgba(255,107,107,.16);color:var(--bad)}.b-note{background:rgba(255,255,255,.08);color:var(--dim)}
-  .b-done{background:rgba(56,232,168,.14);color:var(--ok)}.b-auto{background:rgba(52,224,255,.14);color:var(--cyan)}
+  .b-todo{background:var(--accent-bg);color:var(--accent-ink)} .b-wip{background:rgba(245,180,85,.16);color:var(--warn)}
+  .b-blocked{background:rgba(255,107,107,.16);color:var(--bad)} .b-note{background:rgba(255,255,255,.08);color:var(--dim)}
+  .b-done{background:rgba(70,201,127,.14);color:var(--ok)} .b-auto{background:rgba(52,224,255,.14);color:var(--cyan)}
+  .diff{display:none;margin-top:11px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .diff.open{display:block}
+  .diff pre{margin:0;padding:12px 13px;font-family:var(--mono);font-size:12.5px;line-height:1.5;overflow:auto;max-height:340px;background:#0a0c16;color:#c8ccda;white-space:pre}
+
+  .calm{text-align:center;padding:38px 20px;border:1px dashed var(--border);border-radius:16px;background:var(--card)}
+  .calm .big{font-size:19px;font-weight:650} .calm .small{color:var(--muted);margin-top:7px}
+
+  /* HAPPENING — one calm feed */
+  .feed{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:4px 2px}
+  .live{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--border)}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:p 1.8s infinite}
+  .pulse.idle{background:var(--faint);animation:none}
+  @keyframes p{0%{box-shadow:0 0 0 0 rgba(139,124,255,.5)}70%{box-shadow:0 0 0 7px rgba(139,124,255,0)}100%{box-shadow:0 0 0 0 rgba(139,124,255,0)}}
+  .ev{display:flex;gap:10px;align-items:baseline;padding:9px 14px;font-size:13.5px;color:var(--muted)}
+  .ev .t{margin-left:auto;color:var(--faint);font-size:12px;white-space:nowrap}
+  .ev b{color:var(--text);font-weight:600}
+  .ev .gi{flex:0 0 18px}
+
+  .dobar{display:flex;gap:10px;flex-wrap:wrap;margin-top:2px}
+  .panel{margin-top:12px}
+  .fin{display:block;width:100%;margin:6px 0;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--text);font:inherit}
+
+  /* HEALTH — quiet, collapsed */
+  .health{margin-top:26px;border-top:1px solid var(--border);padding-top:15px}
+  .hsum{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;cursor:pointer}
+  .hsum .chev{margin-left:auto;color:var(--faint);transition:.2s}
+  .hsum.open .chev{transform:rotate(180deg)}
+  .hbody{display:none;margin-top:14px} .hbody.open{display:block}
+  .hgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px}
+  .hcell{background:var(--card);border:1px solid var(--border);border-radius:11px;padding:13px}
+  .hcell .k{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em}
+  .hcell .v{font-size:15px;margin-top:5px;font-weight:600}
+  .agent{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid rgba(255,255,255,.06)}
+  .agent:first-of-type{border-top:0}
+  .agent .av{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-weight:800;font-size:12px;flex-shrink:0;background:var(--accent-bg);color:var(--accent-ink)}
+  .agent.self .av{background:var(--grad);color:#fff}
+  .agent .main{flex:1;min-width:0}.agent .nm{font-weight:650}.agent .sub{font-size:12px;color:var(--muted)}
+  .pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap}
+  .pill.on{background:rgba(70,201,127,.14);color:var(--ok)} .pill.off{background:rgba(255,255,255,.07);color:var(--muted)}
+  .pill.you{background:var(--accent-bg);color:var(--accent-ink)}
   .role{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:rgba(255,255,255,.07);color:var(--dim);margin-left:5px}
-  .role.active{background:rgba(56,232,168,.16);color:var(--ok)}
-  .role.active::before{content:"● ";font-size:8px;vertical-align:middle}
-  .btn{background:var(--grad);color:#fff;border:0;border-radius:9px;padding:7px 14px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
-  .btn:disabled{opacity:.5;cursor:default}
-  .pend{border:1px dashed rgba(176,107,255,.4);background:rgba(176,107,255,.06);border-radius:11px;padding:11px 13px;margin-top:8px}
-  .pend .nm{font-weight:700}
-  .pend .idr{font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all;margin:3px 0 9px}
-  .warnline{font-size:11.5px;color:var(--muted);margin-top:10px}
-  .stat{display:flex;gap:22px;flex-wrap:wrap}.stat .n{font-size:26px;font-weight:900;letter-spacing:-.02em}.stat .l{font-size:12px;color:var(--muted)}
+  .role.active{background:rgba(70,201,127,.16);color:var(--ok)} .role.active::before{content:"● ";font-size:8px;vertical-align:middle}
   .err{color:var(--bad);font-size:12.5px;margin-top:6px}
-  /* simple-by-default: the "waiting for you" panel + progressive disclosure */
-  .wrow{display:flex;align-items:center;gap:12px;padding:13px 2px;border-top:1px solid rgba(255,255,255,.06)}
-  .wrow:first-of-type{border-top:0}
-  .wrow .main{flex:1;min-width:0}
-  .wrow .title{font-weight:700;font-size:15.5px}
-  .disclose{display:block;width:100%;text-align:left;margin:16px 0 0;cursor:pointer;
-    background:var(--card);border:1px solid var(--border);border-radius:11px;
-    padding:11px 15px;font:inherit;font-weight:600;font-size:13.5px;color:var(--muted);
-    transition:border-color .2s,color .2s}
-  .disclose:hover{border-color:var(--accent);color:var(--text)}
-  #details{margin-top:14px}
-  footer{margin-top:30px;font-size:11.5px;color:var(--muted);text-align:center}
+  .hsub{font-size:11.5px;color:var(--faint);margin-top:10px}
+  .foot{color:var(--faint);font-size:12px;text-align:center;margin-top:32px}
 </style>
 </head>
 <body>
+
+<header><div class="wrap glance">
+  <div class="brand"><span class="glyph">⇄</span> codesync</div>
+  <span id="g-projbtn" class="proj" style="display:none">—<span class="chev">▾</span></span>
+  <div class="stat" id="g-sync" style="display:none"><span class="dot" id="g-dot"></span> <span id="g-synctext"></span></div>
+  <div class="stat need" id="g-need" style="display:none">·&nbsp;&nbsp;<b></b></div>
+  <div class="stat work" id="g-work" style="display:none">·&nbsp;&nbsp;<b></b></div>
+  <div class="spacer"></div>
+  <div class="who"><span id="g-identity"></span> · <span id="g-updated"></span></div>
+</div></header>
+
 <div class="wrap">
-  <header>
-    <div class="brand"><span class="glyph">⇄</span> codesync</div>
-    <div class="meta"><div id="m-identity"></div></div>
-  </header>
 
-  <div class="crumbs">
-    <a id="crumb-root">Projects</a>
-    <span id="crumb-tail" style="display:none"><span class="sep">/</span> <span class="here" id="crumb-name"></span></span>
-    <span class="upd" id="updated"></span>
-  </div>
-
-  <!-- machine-level pending pairing requests: always visible when present -->
-  <section class="card span" id="card-pending" style="display:none;margin-bottom:16px">
-    <h2>Incoming pairing requests <span class="count" id="c-pending"></span></h2>
-    <div id="pending"></div>
-    <div class="warnline">Only accept devices you recognise — verify the ID out-of-band. Accepting trusts the device; folder sharing still happens via <span style="font-family:var(--mono)">/codesync-pair</span> in a terminal.</div>
-  </section>
-
-  <!-- LIST VIEW: projects -->
-  <section id="view-list">
+  <!-- LIST VIEW -->
+  <section id="view-list" class="zone">
+    <div class="zlabel">Your projects</div>
     <div id="projects"><div class="empty">…</div></div>
   </section>
 
-  <!-- DETAIL VIEW: one project. Simple by default — one "waiting for you"
-       panel — with everything operational behind a System-details toggle. -->
+  <!-- DETAIL VIEW -->
   <section id="view-detail" style="display:none">
-    <section class="card span" id="card-waiting">
-      <h2>Waiting for you <span class="count" id="c-waiting"></span></h2>
-      <div id="waiting"><div class="empty">…</div></div>
+
+    <section class="zone">
+      <div class="zlabel">Needs your decision <span class="n" id="c-need" style="display:none"></span></div>
+      <div id="needs"><div class="empty">…</div></div>
     </section>
 
-    <button type="button" id="details-toggle" class="disclose">▸ System details — peers, sync, autopilot, metrics, activity</button>
-    <div id="details" hidden>
-      <div class="grid">
-        <section class="card span">
-          <h2>Machines on this project <span class="count" id="c-agents"></span>
-            <span class="st" style="margin-left:auto"><span id="st-dot" class="dot"></span><span id="st-text"></span></span></h2>
-          <div id="agents"><div class="empty">…</div></div>
-        </section>
-        <section class="card span" id="card-sessions" style="display:none">
-          <h2>Live agents <span class="count" id="c-sessions"></span></h2>
-          <div id="sessions"></div>
-          <div class="warnline">Claude terminal sessions running on THIS machine right now — a launched agent shows up here within a few seconds and disappears when you close its terminal. <strong>Stop</strong> ends the agent (the terminal window may stay open, depending on its settings). Distinct from the paired <em>machines</em> above.</div>
-        </section>
-        <section class="card span" id="card-launch">
-          <h2>Launch an agent <span class="count">· terminal on this machine</span></h2>
-          <div id="launch"><div class="empty">…</div></div>
-          <div class="warnline">Opens a terminal SESSION on this machine running Claude as the chosen role — it appears under “Live agents” above while running. A new role here is created with name + Owns checks only; for a full conflict review use <span style="font-family:var(--mono)">/codesync-role-new</span>.</div>
-        </section>
-        <section class="card span" id="card-reviews" style="display:none">
-          <h2>Autonomy review queue <span class="count" id="c-reviews"></span></h2>
-          <div id="reviews"></div>
-          <div class="warnline">Branches produced by autonomous agents in an isolated clone. <strong>Approve</strong> lands the (rebased) branch in your LOCAL repo only — you still merge + sync it yourself, so nothing reaches a teammate until you do. <strong>Reject</strong> drops it. Entries flagged <em>blocked</em> touch a secret-like file and can’t be approved.</div>
-        </section>
-        <section class="card span">
-          <h2>Needs attention <span class="count" id="c-attn"></span></h2>
-          <div id="attention"><div class="empty">…</div></div>
-        </section>
-        <section class="card span" id="card-conflicts" style="display:none">
-          <h2>Sync conflicts <span class="count" id="c-conflicts"></span></h2>
-          <div id="conflicts"></div>
-          <div class="warnline">Syncthing kept both copies of a file edited in two places at once. Open each, merge by hand, then delete the <span style="font-family:var(--mono)">.sync-conflict-</span> copy.</div>
-        </section>
-        <section class="card span">
-          <h2>Activity <span class="count" id="c-feed"></span></h2>
-          <div id="feed"><div class="empty">…</div></div>
-          <div class="warnline">Recent activity, reconstructed from file history — not a complete audit log. Peer connect/disconnect isn't tracked here (see Agents for live status).</div>
-        </section>
-        <section class="card">
-          <h2>Autopilot</h2>
-          <div id="autopilot"><div class="empty">…</div></div>
-        </section>
-        <section class="card">
-          <h2>Metrics</h2>
-          <div id="metrics"><div class="empty">…</div></div>
-        </section>
-        <section class="card span">
-          <h2>Folder sync</h2>
-          <div id="folder"><div class="empty">…</div></div>
-        </section>
-        <section class="card span">
-          <h2>Threads <span class="count" id="c-threads"></span></h2>
-          <div id="threads"><div class="empty">…</div></div>
-        </section>
-      </div>
-    </div>
+    <section class="zone">
+      <div class="zlabel">What's happening</div>
+      <div class="feed" id="happening"><div class="empty" style="padding:12px 14px">…</div></div>
+    </section>
+
+    <section class="zone">
+      <div class="zlabel">Start something</div>
+      <div id="do"><div class="dobar"><span class="empty">…</span></div></div>
+    </section>
+
+    <section class="health">
+      <div class="hsum" id="health-sum"><span class="dot" id="h-dot"></span> <span id="h-line">…</span><span class="chev">▾</span></div>
+      <div class="hbody" id="health-body"></div>
+    </section>
   </section>
 
-  <footer>read-only · localhost · auto-refreshes every 4s · close the tab or run <span style="font-family:var(--mono)">/codesync-dashboard --stop</span> to end</footer>
+  <div class="foot">read-only · localhost · auto-refreshes every 4s · close the tab or run <span class="mono">/codesync-dashboard --stop</span> to end</div>
 </div>
 
 <script>
 "use strict";
-const TOKEN = new URLSearchParams(location.search).get("t") || "";
-let VIEW = "list";        // 'list' | 'detail'
-let CURRENT = "";         // selected project (detail view)
-let OVERVIEW = {projects:[]};   // last overview, for project metadata in detail
-let LIVE_ROLES = new Set();     // roles with a running session on this machine (from /api/sessions)
+const TOKEN=new URLSearchParams(location.search).get("t")||"";
+let VIEW="list", CURRENT="", OVERVIEW={projects:[]}, LIVE_ROLES=new Set();
+let HEALTH_OPEN=false;
+const VIEWED=new Set();                 // review ids whose diff has been opened (approve-lock)
+// caches so each zone re-renders from the latest of every source without flicker
+const NY={pending:[],reviews:[],waiting:[],conflicts:[]};
+const HAP={sessions:[],feed:[]};
+const HLT={peers:null,folder:null,autopilot:null,metrics:null,sync_ok:null};
 
-function api(path){
-  return fetch(path,{headers:{"X-CSDash-Token":TOKEN}})
-    .then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); });
-}
-function el(tag,attrs,kids){
-  const n=document.createElement(tag);
-  if(attrs) for(const k in attrs){
-    if(k==="text") n.textContent=attrs[k];
-    else if(k==="class") n.className=attrs[k];
-    else n.setAttribute(k,attrs[k]);
-  }
-  (kids||[]).forEach(c=>c&&n.appendChild(c));
-  return n;
-}
-function clear(n){ while(n.firstChild) n.removeChild(n.firstChild); }
-function fmtSecs(s){ if(s==null)return"—"; s=Math.round(s);
-  if(s<60)return s+"s"; if(s<3600)return Math.round(s/60)+"m";
-  if(s<86400)return Math.round(s/3600)+"h"; return Math.round(s/86400)+"d"; }
-function initials(name){ const w=(name||"").replace(/[^A-Za-z0-9 ]/g,"").trim().split(/\s+|-/);
-  return ((w[0]||"?")[0]+((w[1]||"")[0]||"")).toUpperCase(); }
+function api(p){return fetch(p,{headers:{"X-CSDash-Token":TOKEN}}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();});}
+function post(p,b){return fetch(p,{method:"POST",headers:{"X-CSDash-Token":TOKEN,"Content-Type":"application/json"},
+  body:JSON.stringify(b)}).then(r=>r.json().then(j=>({status:r.status,body:j})).catch(()=>({status:r.status,body:{}})));}
+function el(t,a,k){const n=document.createElement(t);if(a)for(const x in a){
+  if(x==="text")n.textContent=a[x];else if(x==="class")n.className=a[x];else n.setAttribute(x,a[x]);}
+  (k||[]).forEach(c=>c&&n.appendChild(c));return n;}
+function clear(n){while(n.firstChild)n.removeChild(n.firstChild);}
+function fmtSecs(s){if(s==null)return"—";s=Math.round(s);if(s<60)return s+"s";if(s<3600)return Math.round(s/60)+"m";if(s<86400)return Math.round(s/3600)+"h";return Math.round(s/86400)+"d";}
+function initials(n){const w=(n||"").replace(/[^A-Za-z0-9 ]/g,"").trim().split(/\s+|-/);return ((w[0]||"?")[0]+((w[1]||"")[0]||"")).toUpperCase();}
+function plainStatus(s){return {todo:"to do",wip:"in progress",blocked:"blocked",note:"note",done:"done"}[s]||s||"note";}
+function projRoles(n){const p=(OVERVIEW.projects||[]).find(x=>x.name===n);return p?p.roles:[];}
 
-// ── view switching ─────────────────────────────────────────────────────────
-function showList(){ VIEW="list"; CURRENT="";
+// ── view switching ──
+function showList(){VIEW="list";CURRENT="";
   document.getElementById("view-list").style.display="";
   document.getElementById("view-detail").style.display="none";
-  document.getElementById("crumb-tail").style.display="none";
-  refresh();
-}
-function showDetail(name){ VIEW="detail"; CURRENT=name;
+  ["g-projbtn","g-sync","g-need","g-work"].forEach(id=>document.getElementById(id).style.display="none");
+  refresh();}
+function showDetail(n){VIEW="detail";CURRENT=n;HEALTH_OPEN=false;VIEWED.clear();
+  NY.pending=[];NY.reviews=[];NY.waiting=[];NY.conflicts=[];HAP.sessions=[];HAP.feed=[];
   document.getElementById("view-list").style.display="none";
   document.getElementById("view-detail").style.display="";
-  document.getElementById("crumb-tail").style.display="";
-  document.getElementById("crumb-name").textContent=name;
-  // collapse System details + reset every panel so no stale data shows across projects
-  setDetails(false);
-  _launchFor="";   // force the launch/create panel to rebuild for this project
-  ["waiting","agents","sessions","attention","conflicts","feed","autopilot","metrics","folder","threads"].forEach(id=>{
-    const b=document.getElementById(id); clear(b); b.appendChild(el("div",{class:"empty",text:"…"}));
-  });
-  refresh();
-}
-document.getElementById("crumb-root").addEventListener("click",showList);
+  document.getElementById("g-projbtn").style.display="";
+  document.getElementById("g-projbtn").firstChild.nodeValue=n;
+  document.getElementById("health-body").classList.remove("open");
+  document.getElementById("health-sum").classList.remove("open");
+  ["needs","happening","do"].forEach(id=>{const b=document.getElementById(id);clear(b);b.appendChild(el("div",{class:"empty",text:"…"}));});
+  _launchFor="";
+  refresh();}
+document.getElementById("g-projbtn").addEventListener("click",showList);
+document.getElementById("health-sum").addEventListener("click",()=>{
+  HEALTH_OPEN=!HEALTH_OPEN;
+  document.getElementById("health-body").classList.toggle("open",HEALTH_OPEN);
+  document.getElementById("health-sum").classList.toggle("open",HEALTH_OPEN);});
 
-// progressive disclosure: operator detail stays collapsed until asked for
-let DETAILS=false;
-function setDetails(open){
-  DETAILS=open;
-  document.getElementById("details").hidden=!open;
-  document.getElementById("details-toggle").textContent=
-    (open?"▾":"▸")+" System details — peers, sync, autopilot, metrics, activity";
+// ── glance bar ──
+function renderGlance(){
+  document.getElementById("g-identity").textContent=OVERVIEW.identity?("signed in as "+OVERVIEW.identity):"";
+  document.getElementById("g-updated").textContent="updated "+new Date().toLocaleTimeString();
+  if(VIEW!=="detail")return;
+  // sync dot
+  const dot=document.getElementById("g-dot"),txt=document.getElementById("g-synctext"),sync=document.getElementById("g-sync");
+  sync.style.display="";
+  const f=HLT.folder||{};
+  if(HLT.sync_ok===false){dot.className="dot bad";txt.textContent="Syncthing offline";}
+  else if(HLT.sync_ok==null){dot.className="dot";txt.textContent="checking sync…";}
+  else if((f.need_files||0)>0){dot.className="dot warn";txt.textContent=f.need_files+" file"+(f.need_files===1?"":"s")+" syncing";}
+  else if((HLT.peers||[]).some(p=>!p.connected)){dot.className="dot warn";txt.textContent="a peer is offline";}
+  else if((HLT.peers||[]).length===0){dot.className="dot ok";txt.textContent="no peers yet";}
+  else{dot.className="dot ok";txt.textContent="everyone in sync";}
+  // need-you count
+  const need=NY.pending.length+NY.reviews.length+NY.waiting.length+NY.conflicts.length;
+  const ng=document.getElementById("g-need");ng.style.display=need?"":"none";ng.querySelector("b").textContent=need+" need"+(need===1?"s":"")+" you";
+  // agents working
+  const wg=document.getElementById("g-work");wg.style.display="";
+  const w=HAP.sessions.length;wg.querySelector("b").textContent=w?(w+" agent"+(w===1?"":"s")+" working"):"agents idle";
 }
-document.getElementById("details-toggle").addEventListener("click",()=>{ setDetails(!DETAILS); if(DETAILS) refresh(); });
 
-// ── renderers ───────────────────────────────────────────────────────────────
-function renderHeader(o){
-  OVERVIEW=o;   // keeps device_id/roles for the System-details agents panel
-  document.getElementById("m-identity").textContent=o.identity?("signed in as "+o.identity):"";
-}
+// ── projects list ──
 function renderProjects(o){
-  const box=document.getElementById("projects"); clear(box);
-  if(!o.projects.length){ box.appendChild(el("div",{class:"empty",text:"No projects registered on this machine yet. Run /install-codesync."})); return; }
+  const box=document.getElementById("projects");clear(box);
+  if(!o.projects.length){box.appendChild(el("div",{class:"empty",text:"No projects on this machine yet. Run /install-codesync."}));return;}
   o.projects.forEach(p=>{
-    const meta=el("div",{class:"pmeta"},[
-      el("span",{class:"tag",text:(p.roles.length||0)+" role"+(p.roles.length===1?"":"s")}),
-      p.exists?null:el("span",{class:"tag warn",text:"missing folder"}),
-      el("span",{class:"chev",text:"›"}),
-    ]);
     const row=el("div",{class:"prow"},[
-      el("div",{class:"main",style:"min-width:0"},[
-        el("div",{class:"pname",text:p.name}),
-        el("div",{class:"ppath",text:p.path||""}),
-      ]),
-      meta,
+      el("div",{class:"main",style:"min-width:0"},[el("div",{class:"pname",text:p.name}),el("div",{class:"ppath",text:p.path||""})]),
+      el("div",{class:"pmeta"},[
+        el("span",{class:"tag",text:(p.roles.length||0)+" role"+(p.roles.length===1?"":"s")}),
+        p.exists?null:el("span",{class:"tag warn",text:"missing folder"}),
+        el("span",{class:"chev",text:"›"})]),
     ]);
-    row.addEventListener("click",()=>showDetail(p.name));
-    box.appendChild(row);
+    row.addEventListener("click",()=>showDetail(p.name));box.appendChild(row);
   });
 }
-function renderStatus(ok){
-  const dot=document.getElementById("st-dot"), txt=document.getElementById("st-text");
-  if(!dot||!txt) return;  // lives in System details; absent when collapsed
-  if(ok){dot.className="dot ok";txt.textContent="Syncthing online";}
-  else{dot.className="dot bad";txt.textContent="Syncthing offline";}
-}
-function plainStatus(s){
-  return {todo:"to do",wip:"in progress",blocked:"blocked",note:"note",done:"done"}[s] || s || "note";
-}
-// The one thing a teammate needs: what's addressed to me here that's still open.
-function renderWaiting(d){
-  const box=document.getElementById("waiting"); clear(box);
-  const open=(d.threads||[]).filter(t=>t.status!=="done");
-  document.getElementById("c-waiting").textContent=open.length||"";
-  if(!open.length){
-    box.appendChild(el("div",{class:"empty",text:"You're all caught up — nothing waiting for you in this project."}));
-    return;
-  }
-  open.forEach(t=>{
-    const who=t.from_identity||t.from||"someone";
-    const st=t.status||"note";
-    box.appendChild(el("div",{class:"wrow"},[
-      el("div",{class:"main"},[
-        el("div",{class:"title",text:t.title}),
-        el("div",{class:"sub",text:"from "+who+" · "+t.age+(t.attach_count?(" · "+t.attach_count+" attached"):"")}),
-      ]),
-      el("span",{class:"badge b-"+(["todo","wip","blocked","note","done"].includes(st)?st:"note"),text:plainStatus(st)}),
-    ]));
-  });
-}
-function projRoles(name){ const p=(OVERVIEW.projects||[]).find(x=>x.name===name); return p?p.roles:[]; }
 
-function renderAgents(d){
-  renderStatus(d.syncthing_ok);
-  const box=document.getElementById("agents"); clear(box);
-  const peers=d.peers||[];
-  // self first — this machine is always an agent on its own projects
-  const myRoles=projRoles(d.project);
-  const selfSub=el("div",{class:"sub"},[el("span",{class:"mono",text:(OVERVIEW.device_id||"").slice(0,7)+"…"})]);
-  myRoles.forEach(r=>selfSub.appendChild(el("span",{
-    class:"role"+(LIVE_ROLES.has(r)?" active":""),
-    title:LIVE_ROLES.has(r)?"active — a terminal is running as this role":"registered (no running agent)",
-    text:r})));
-  box.appendChild(el("div",{class:"agent self"},[
-    el("div",{class:"av",text:initials(OVERVIEW.identity||"me")}),
-    el("div",{class:"main"},[el("div",{class:"nm",text:(OVERVIEW.identity||"this machine")}),selfSub]),
-    el("span",{class:"pill you",text:"this machine"}),
-  ]));
-  document.getElementById("c-agents").textContent=(peers.length+1);
-  if(!d.syncthing_ok){
-    box.appendChild(el("div",{class:"empty",text:"Syncthing offline — connected peers can't be listed right now."}));
-    return;
-  }
-  if(!peers.length){
-    box.appendChild(el("div",{class:"empty",text:"No other machines paired to this project yet. Pair one with /codesync-pair."}));
-    return;
-  }
-  peers.forEach(p=>{
-    const sub=el("div",{class:"sub"},[el("span",{class:"mono",text:p.id_short+"…"}),
-      document.createTextNode(p.connected&&p.address?("  "+p.address):"")]);
-    box.appendChild(el("div",{class:"agent"},[
-      el("div",{class:"av",text:initials(p.name)}),
-      el("div",{class:"main"},[el("div",{class:"nm",text:p.name}),sub]),
-      el("span",{class:"pill "+(p.connected?"on":"off"),text:p.connected?"connected":"offline"}),
-    ]));
-  });
-  // folder panel rides along on the same payload
-  const fb=document.getElementById("folder"); clear(fb); const f=d.folder||{};
-  if(!f.syncthing_ok){ fb.appendChild(el("div",{class:"empty",text:"Offline."})); }
-  else fb.appendChild(el("div",{class:"stat"},[
-    el("div",{},[el("div",{class:"n",text:String(f.state||"?")}),el("div",{class:"l",text:"state"})]),
-    el("div",{},[el("div",{class:"n",text:String(f.local_files)}),el("div",{class:"l",text:"local files"})]),
-    el("div",{},[el("div",{class:"n",text:String(f.need_files)}),el("div",{class:"l",text:f.need_files?"to sync":"up to date"})]),
-  ]));
+// ── NEEDS YOU (unified queue) ──
+function diffChips(r){
+  const out=[];
+  const m=/(\d+)\s+file/.exec(r.diffstat||"");if(m)out.push({t:m[1]+" file"+(m[1]==="1"?"":"s"),c:"ok"});
+  const ins=/(\d+)\s+insertion/.exec(r.diffstat||"");const del=/(\d+)\s+deletion/.exec(r.diffstat||"");
+  if(ins)out.push({t:"+"+ins[1],c:"ok"});if(del)out.push({t:"-"+del[1],c:"ok"});
+  if(r.status==="blocked")out.push({t:"⚠ secret: "+((r.secrets||[]).join(", ")||"flagged"),c:"warn"});
+  return out;
 }
-function renderSessions(list){
-  const card=document.getElementById("card-sessions"), box=document.getElementById("sessions"); clear(box);
-  LIVE_ROLES=new Set(list.map(s=>s.role));   // feeds the active-role marking on the machine row
-  document.getElementById("c-sessions").textContent=list.length||"";
-  card.style.display=list.length?"":"none";
-  list.forEach(s=>{
-    const btn=el("button",{class:"btn",text:"Stop"});
-    btn.addEventListener("click",()=>stopSession(s.pid,btn));
-    box.appendChild(el("div",{class:"agent self"},[
-      el("div",{class:"av",text:initials(s.role)}),
-      el("div",{class:"main"},[el("div",{class:"nm",text:s.role}),
-        el("div",{class:"sub",text:"running "+(s.age||"")+" · pid "+s.pid})]),
-      el("span",{class:"pill on",text:"running"}),
-      btn,
-    ]));
-  });
+function reviewCard(r){
+  const blocked=r.status==="blocked";
+  const d=el("div",{class:"decision",id:"need-rev-"+r.id});
+  const chips=el("div",{class:"chips"});diffChips(r).forEach(c=>chips.appendChild(el("span",{class:"chip "+(c.c||""),text:c.t})));
+  const diffBox=el("pre");const diffWrap=el("div",{class:"diff"});diffWrap.appendChild(diffBox);
+  const okBtn=el("button",{class:"btn primary",text:"Approve ▸"});
+  const hint=el("span",{class:"hint",text:"view the diff to approve"});
+  if(!VIEWED.has(r.id)&&!blocked)okBtn.disabled=true;
+  const viewLink=el("button",{class:"link",text:"view diff ▾"});
+  viewLink.addEventListener("click",()=>{
+    if(diffWrap.classList.contains("open")){diffWrap.classList.remove("open");return;}
+    diffWrap.classList.add("open");diffBox.textContent="loading…";
+    VIEWED.add(r.id);if(!blocked){okBtn.disabled=false;hint.style.display="none";}
+    api("/api/review-diff?project="+encodeURIComponent(CURRENT)+"&id="+encodeURIComponent(r.id))
+      .then(x=>{diffBox.textContent=(x.diff&&x.diff.trim())?x.diff:(x.error||"(no diff)");})
+      .catch(()=>{diffBox.textContent="(failed to load diff)";});});
+  const actions=el("div",{class:"actions"},[viewLink,el("span",{class:"grow"})]);
+  if(blocked){actions.appendChild(el("span",{class:"badge b-blocked",text:"blocked"}));}
+  else{actions.appendChild(hint);}
+  const rej=el("button",{class:"btn ghostred",text:"Reject"});
+  rej.addEventListener("click",()=>reviewAction(r.id,"reject",d,rej));
+  actions.appendChild(rej);
+  if(!blocked){okBtn.addEventListener("click",()=>reviewAction(r.id,"approve",d,okBtn));actions.appendChild(okBtn);}
+  d.appendChild(el("div",{class:"drow"},[el("div",{class:"ic",text:"🤖"}),
+    el("div",{class:"dbody"},[
+      el("div",{class:"dtitle",text:(r.role||"agent")+" — "+(r.summary?r.summary.slice(0,90):(r.branch||r.id))}),
+      el("div",{class:"dsub",text:r.summary&&r.summary.length>90?r.summary:""}),
+      chips,actions,diffWrap])]));
+  return d;
 }
-function stopSession(pid,btn){
-  btn.disabled=true; btn.textContent="Stopping…";
-  post("/api/stop-session",{project:CURRENT,pid:pid}).then(({body})=>{
-    if(body.stopped){ refresh(); }   // file removed server-side; the next poll drops the row
-    else { btn.disabled=false; btn.textContent="Stop";
-      btn.parentNode.appendChild(el("div",{class:"err",text:body.error||body.message||"stop failed"})); }
-  }).catch(()=>{ btn.disabled=false; btn.textContent="Stop"; });
+function pairingCard(p){
+  const d=el("div",{class:"decision"});
+  const acc=el("button",{class:"btn primary",text:"Accept"}),ig=el("button",{class:"btn ghostred",text:"Ignore"});
+  acc.addEventListener("click",()=>accept(p.id,acc,d));
+  ig.addEventListener("click",()=>{d.classList.add("gone");});  // local dismiss only (no server unpair here)
+  d.appendChild(el("div",{class:"drow"},[el("div",{class:"ic pair",text:"🔗"}),
+    el("div",{class:"dbody"},[
+      el("div",{class:"dtitle",text:(p.name||"A machine")+" wants to connect"}),
+      el("div",{class:"dsub",text:"Only accept if you recognise it — verify the code with them out-of-band first."+(p.time?(" First seen "+p.time+"."):"")}),
+      el("div",{class:"did",text:p.id}),
+      el("div",{class:"actions"},[el("span",{class:"grow"}),ig,acc])])]));
+  return d;
 }
-function renderReviews(list){
-  const card=document.getElementById("card-reviews"), box=document.getElementById("reviews"); clear(box);
-  // Show entries still awaiting a decision (pending) or flagged (blocked).
-  const open=list.filter(r=>r.status==="pending"||r.status==="blocked");
-  document.getElementById("c-reviews").textContent=open.length||"";
-  card.style.display=open.length?"":"none";
-  open.forEach(r=>{
-    const blocked=r.status==="blocked";
-    const stat=el("div",{style:"display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto"});
-    const sub=el("div",{class:"sub",text:(r.role||"")+" · "+(r.diffstat||"")+(blocked?" · ⚠ secrets: "+(r.secrets||[]).join(", "):"")});
-    const row=el("div",{class:"agent"},[
-      el("div",{class:"av",text:initials(r.role||"?")}),
-      el("div",{class:"main"},[el("div",{class:"nm",text:r.summary||r.branch||r.id}),sub]),
-      stat,
-    ]);
-    // View diff — you should never approve agent code you can't see.
-    const diffBox=el("pre",{style:"display:none;white-space:pre-wrap;max-height:320px;overflow:auto;font-family:var(--mono);font-size:12px;margin-top:8px;padding:8px;border-radius:8px;background:rgba(127,127,127,.08)"});
-    const df=el("button",{class:"btn",text:"Diff"});
-    df.addEventListener("click",()=>{
-      if(diffBox.style.display!=="none"){ diffBox.style.display="none"; return; }
-      diffBox.style.display=""; diffBox.textContent="loading…";
-      api("/api/review-diff?project="+encodeURIComponent(CURRENT)+"&id="+encodeURIComponent(r.id))
-        .then(d=>{ diffBox.textContent=(d.diff&&d.diff.trim())?d.diff:(d.error||"(no diff)"); })
-        .catch(()=>{ diffBox.textContent="(failed to load diff)"; });
-    });
-    stat.appendChild(df);
-    if(blocked){ stat.appendChild(el("span",{class:"pill",text:"blocked"})); }
-    else {
-      const ap=el("button",{class:"btn",text:"Approve"});
-      ap.addEventListener("click",()=>reviewAction(r.id,"approve",stat,ap));
-      stat.appendChild(ap);
-    }
-    const rj=el("button",{class:"btn",text:"Reject"});
-    rj.addEventListener("click",()=>reviewAction(r.id,"reject",stat,rj));
-    stat.appendChild(rj);
-    const wrap=el("div"); wrap.appendChild(row); wrap.appendChild(diffBox);
-    box.appendChild(wrap);
-  });
+function threadCard(t){
+  const who=t.from_identity||t.from||"someone";const st=t.status||"note";
+  const d=el("div",{class:"decision info"});
+  d.appendChild(el("div",{class:"drow"},[el("div",{class:"ic reply",text:"💬"}),
+    el("div",{class:"dbody"},[
+      el("div",{class:"dtitle",text:t.title}),
+      el("div",{class:"dsub",text:"from "+who+" · "+t.age+(t.attach_count?(" · "+t.attach_count+" attached"):"")+" — reply from your terminal with /codesync-thread-reply"})]),
+    el("span",{class:"badge b-"+(["todo","wip","blocked","note","done"].includes(st)?st:"note"),text:plainStatus(st)})]));
+  return d;
 }
-function reviewAction(id,action,into,btn){
-  btn.disabled=true; btn.textContent=action==="approve"?"Approving…":"Rejecting…";
+function conflictCard(c){
+  const d=el("div",{class:"decision info"});
+  d.appendChild(el("div",{class:"drow"},[el("div",{class:"ic conflict",text:"⚠"}),
+    el("div",{class:"dbody"},[
+      el("div",{class:"dtitle",text:"Sync conflict: "+c.name}),
+      el("div",{class:"dsub"},[el("span",{class:"mono",text:c.rel}),document.createTextNode(" · "+c.age+" — open both, merge by hand, delete the .sync-conflict- copy")])])]));
+  return d;
+}
+function renderNeedsYou(){
+  const box=document.getElementById("needs");clear(box);
+  const total=NY.pending.length+NY.reviews.length+NY.waiting.length+NY.conflicts.length;
+  const c=document.getElementById("c-need");c.style.display=total?"":"none";c.textContent=total;
+  if(!total){box.appendChild(el("div",{class:"calm"},[
+    el("div",{class:"big",text:"You're all caught up ✓"}),
+    el("div",{class:"small",text:"Nothing needs your decision in this project right now."})]));return;}
+  NY.pending.forEach(p=>box.appendChild(pairingCard(p)));
+  NY.reviews.forEach(r=>box.appendChild(reviewCard(r)));
+  NY.waiting.forEach(t=>box.appendChild(threadCard(t)));
+  NY.conflicts.forEach(cf=>box.appendChild(conflictCard(cf)));
+}
+function reviewAction(id,action,card,btn){
+  btn.disabled=true;btn.textContent=action==="approve"?"Approving…":"Rejecting…";
   post("/api/review-action",{project:CURRENT,id:id,action:action}).then(({body})=>{
-    if(body.ok){ into.appendChild(el("div",{class:"sub",text:body.message||"done"})); refresh(); }
-    else { btn.disabled=false; btn.textContent=action==="approve"?"Approve":"Reject";
-      into.appendChild(el("div",{class:"err",text:body.error||body.message||"action failed"})); }
-  }).catch(()=>{ btn.disabled=false; btn.textContent=action==="approve"?"Approve":"Reject"; });
+    if(body.ok){card.classList.add("gone");NY.reviews=NY.reviews.filter(r=>r.id!==id);setTimeout(renderGlance,300);refresh();}
+    else{btn.disabled=false;btn.textContent=action==="approve"?"Approve ▸":"Reject";
+      card.appendChild(el("div",{class:"err",text:body.error||body.message||"action failed"}));}
+  }).catch(()=>{btn.disabled=false;btn.textContent=action==="approve"?"Approve ▸":"Reject";});
 }
-function renderPending(d){
-  const card=document.getElementById("card-pending"), box=document.getElementById("pending"); clear(box);
-  const list=d.pending||[];
-  document.getElementById("c-pending").textContent=list.length||"";
-  card.style.display=list.length?"":"none";
-  list.forEach(p=>{
-    const btn=el("button",{class:"btn",text:"Accept"});
-    btn.addEventListener("click",()=>accept(p.id,btn));
-    box.appendChild(el("div",{class:"pend"},[
-      el("div",{class:"nm",text:'"'+p.name+'"'}),
-      el("div",{class:"idr",text:p.id}),
-      el("div",{},[btn,el("span",{class:"upd",style:"margin-left:10px",text:"first seen: "+p.time})]),
-    ]));
-  });
-}
-function accept(id,btn){
-  btn.disabled=true; btn.textContent="Accepting…";
-  fetch("/api/accept-pairing",{method:"POST",
-    headers:{"X-CSDash-Token":TOKEN,"Content-Type":"application/json"},
-    body:JSON.stringify({device_id:id})})
-    .then(r=>r.json()).then(res=>{
-      if(!res.ok){ btn.disabled=false; btn.textContent="Retry";
-        btn.parentNode.appendChild(el("div",{class:"err",text:res.error||res.message||"failed"})); }
-      else refresh();
-    }).catch(()=>{ btn.disabled=false; btn.textContent="Retry"; });
-}
-function renderThreads(d){
-  const box=document.getElementById("threads"); clear(box); const t=d.threads||[];
-  document.getElementById("c-threads").textContent=t.length||"";
-  if(!t.length){ box.appendChild(el("div",{class:"empty",text:"No threads in this project's inboxes."})); return; }
-  t.slice(0,40).forEach(x=>{
-    const st=x.status||"note";
-    const badge=el("span",{class:"badge b-"+(["todo","wip","blocked","note","done"].includes(st)?st:"note"),text:st});
-    const who=x.from?("from "+x.from+(x.from_identity?("/"+x.from_identity):"")):"";
-    const sub=el("div",{class:"sub"},[document.createTextNode([who,"→"+x.role,x.age].filter(Boolean).join(" · "))]);
-    if(x.owner) sub.appendChild(el("span",{text:"  [owned by "+x.owner+"]"}));
-    if(x.attach_count) sub.appendChild(el("span",{text:"  [+"+x.attach_count+" attach]"}));
-    const row=el("div",{class:"row"},[el("div",{class:"main"},[el("div",{class:"title",text:x.title}),sub]),badge]);
-    if(x.generated_by==="auto") row.insertBefore(el("span",{class:"badge b-auto",text:"auto"}),badge);
-    box.appendChild(row);
-  });
-}
-// v0.25: the activity-full payload feeds four panels.
-function renderActivityFull(d){
-  renderAttention(d.attention||{});
-  renderConflicts(d.conflicts||[]);
-  renderFeed(d.feed||[]);
-  renderAutopilot(d.autopilot||{});
-  renderMetrics(d.metrics||{});
-}
-function renderConflicts(list){
-  const card=document.getElementById("card-conflicts"), box=document.getElementById("conflicts"); clear(box);
-  document.getElementById("c-conflicts").textContent=list.length||"";
-  card.style.display=list.length?"":"none";
-  list.forEach(c=>box.appendChild(el("div",{class:"row"},[
-    el("span",{class:"badge b-blocked",text:"conflict"}),
-    el("div",{class:"main"},[el("div",{class:"title",text:c.name}),
-      el("div",{class:"sub"},[el("span",{class:"mono",text:c.rel})])]),
-    el("span",{class:"tag",text:c.age}),
-  ])));
-}
-const FEED_KIND={active:["active","b-todo"],archived:["archived","b-done"],
-  noticed:["noticed","b-note"],autopilot:["auto-reply","b-auto"]};
-function renderFeed(feed){
-  const box=document.getElementById("feed"); clear(box);
-  document.getElementById("c-feed").textContent=feed.length?(feed.length>=50?"50+":feed.length):"";
-  if(!feed.length){ box.appendChild(el("div",{class:"empty",text:"No recent activity yet — fills in as threads arrive, get noticed, and get replies."})); return; }
-  feed.forEach(e=>{
-    const k=FEED_KIND[e.kind]||["event","b-note"];
-    const sub=[e.role?("→"+e.role):"", e.from?("from "+e.from):"", e.age].filter(Boolean).join(" · ");
-    box.appendChild(el("div",{class:"row"},[
-      el("span",{class:"badge "+k[1],text:k[0]}),
-      el("div",{class:"main"},[el("div",{class:"title",text:e.title||e.slug||""}),el("div",{class:"sub",text:sub})]),
-    ]));
-  });
-}
-function attnGroup(box,label,items,cls){
-  if(!items||!items.length) return;
-  box.appendChild(el("div",{class:"sub",style:"margin:8px 0 2px;font-weight:700;color:var(--dim)",text:label+" ("+items.length+")"}));
-  items.forEach(it=>box.appendChild(el("div",{class:"row"},[
-    el("div",{class:"main"},[el("div",{class:"title",text:it.title}),
-      el("div",{class:"sub",text:["→"+it.role,it.status,it.age].filter(Boolean).join(" · ")})]),
-    el("span",{class:"badge "+cls,text:it.status||"—"}),
-  ])));
-}
-function renderAttention(a){
-  const box=document.getElementById("attention"); clear(box);
-  const n=(a.stale||[]).length+(a.unclaimed||[]).length+(a.blocked||[]).length+(a.dead_letter||[]).length;
-  document.getElementById("c-attn").textContent=n||"";
-  if(!n){ box.appendChild(el("div",{class:"empty",text:"Nothing needs attention — no stale, blocked, unclaimed, or dead-lettered threads. ✓"})); return; }
-  attnGroup(box,"Blocked",a.blocked,"b-blocked");
-  attnGroup(box,"Stale (open > "+(a.stale_days||3)+"d)",a.stale,"b-wip");
-  attnGroup(box,"Unclaimed todos",a.unclaimed,"b-todo");
-  if(a.dead_letter&&a.dead_letter.length){
-    attnGroup(box,"Dead-letter (role has no profile)",a.dead_letter,"b-note");
-    box.appendChild(el("div",{class:"warnline",text:"Dead-letter is partial: peers' registered roles aren't synced, so this only flags roles with no _roles/ profile here."}));
-  }
-}
-function renderAutopilot(ap){
-  const box=document.getElementById("autopilot"); clear(box);
-  if(!ap.enabled){ box.appendChild(el("div",{class:"empty",text:"Autopilot off (or not available on this machine)."})); return; }
-  box.appendChild(el("div",{class:"stat"},[
-    el("div",{},[el("div",{class:"n",text:ap.last_run_age||"—"}),el("div",{class:"l",text:"last run"})]),
-    el("div",{},[el("div",{class:"n",text:String(ap.runs_last_hour||0)}),el("div",{class:"l",text:"runs last hour"})]),
-  ]));
-  const rec=ap.recent||[];
-  if(rec.length){
-    box.appendChild(el("div",{class:"sub",style:"margin:10px 0 2px;font-weight:700;color:var(--dim)",text:"Recent auto-replies"}));
-    rec.slice(0,6).forEach(r=>box.appendChild(el("div",{class:"row"},[
-      el("span",{class:"badge b-auto",text:"auto"}),
-      el("div",{class:"main"},[el("div",{class:"title",text:r.thread}),el("div",{class:"sub",text:r.when})]),
-    ])));
-  } else box.appendChild(el("div",{class:"empty",text:"No auto-replies yet."}));
-}
-function renderMetrics(m){
-  const box=document.getElementById("metrics"); clear(box);
-  if(m.open==null){ box.appendChild(el("div",{class:"empty",text:"…"})); return; }
-  box.appendChild(el("div",{class:"stat"},[
-    el("div",{},[el("div",{class:"n",text:String(m.open)}),el("div",{class:"l",text:"open"})]),
-    el("div",{},[el("div",{class:"n",text:String(m.done)}),el("div",{class:"l",text:"done"})]),
-    el("div",{},[el("div",{class:"n",text:String(m.active_7d||0)}),el("div",{class:"l",text:"active 7d"})]),
-    el("div",{},[el("div",{class:"n",text:m.oldest_open_age||"—"}),el("div",{class:"l",text:"oldest open"})]),
-    el("div",{},[el("div",{class:"n",text:m.ttn_median_seconds!=null?fmtSecs(m.ttn_median_seconds):"—"}),el("div",{class:"l",text:"median notice ("+(m.ttn_samples||0)+")"})]),
-  ]));
-  const roles=Object.keys(m.by_role||{});
-  if(roles.length){
-    box.appendChild(el("div",{class:"sub",style:"margin:10px 0 2px;font-weight:700;color:var(--dim)",text:"Open by role"}));
-    roles.sort().forEach(r=>box.appendChild(el("div",{class:"row"},[
-      el("div",{class:"main"},[el("div",{class:"title",text:r})]),
-      el("span",{class:"tag",text:String(m.by_role[r])}),
-    ])));
-  }
+function accept(id,btn,card){
+  btn.disabled=true;btn.textContent="Accepting…";
+  post("/api/accept-pairing",{device_id:id}).then(({body})=>{
+    if(body.ok){if(card)card.classList.add("gone");refresh();}
+    else{btn.disabled=false;btn.textContent="Retry";card.appendChild(el("div",{class:"err",text:body.error||body.message||"failed"}));}
+  }).catch(()=>{btn.disabled=false;btn.textContent="Retry";});
 }
 
-// ── operator: launch / create agents (System details only) ─────────────────
-const FIN="display:block;width:100%;margin:6px 0;padding:8px 10px;border-radius:8px;"+
-  "border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--text);font:inherit";
-function post(path,body){
-  return fetch(path,{method:"POST",
-    headers:{"X-CSDash-Token":TOKEN,"Content-Type":"application/json"},
-    body:JSON.stringify(body)})
-    .then(r=>r.json().then(j=>({status:r.status,body:j})).catch(()=>({status:r.status,body:{}})));
-}
-// All untrusted strings (copy command, overlap tokens, errors) render via el's
-// textContent — never innerHTML — so a peer-chosen role/title can't inject HTML.
-function launchInto(role,into,cap){
-  clear(into); into.appendChild(el("span",{class:"sub",text:"launching…"}));
-  post("/api/launch-agent",{project:CURRENT,role:role,capability:cap||""}).then(({body})=>{
-    clear(into);
-    if(body.launched){ into.appendChild(el("span",{class:"pill on",text:"launched ✓"})); }
-    else if(body.copy){
-      into.appendChild(el("div",{class:"sub",text:"Couldn't auto-open a terminal — run this in one:"}));
-      const cp=el("button",{class:"btn",text:"Copy"});
-      cp.addEventListener("click",()=>{ if(navigator.clipboard)
-        navigator.clipboard.writeText(body.copy).then(()=>cp.textContent="Copied").catch(()=>cp.textContent="Copy failed"); });
-      into.appendChild(el("div",{class:"idr",text:body.copy})); into.appendChild(cp);
-    } else into.appendChild(el("div",{class:"err",text:body.error||body.message||"launch failed"}));
-  }).catch(()=>{ clear(into); into.appendChild(el("div",{class:"err",text:"launch failed"})); });
-}
-let _launchFor="";
-function renderLaunch(project){
-  if(_launchFor===project) return;   // build once per project — the 4s poll must not clobber the form
-  _launchFor=project;
-  const box=document.getElementById("launch"); if(!box) return; clear(box);
-  const roles=projRoles(project);
-  const sels={};   // role → its capability <select>, filled from /api/launch-options
-  if(roles.length) roles.forEach(r=>{
-    const stat=el("div",{style:"display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"});
-    // Capability (tool scope). Options + the seeded default come from the server
-    // (the preset table is the single authority); "unrestricted" = launch as today.
-    const sel=el("select",{title:"capability — what tools this agent may use",style:"margin-left:auto;padding:5px 8px;border-radius:8px"});
-    sel.appendChild(el("option",{value:"",text:"unrestricted"}));
-    sels[r]=sel;
-    const btn=el("button",{class:"btn",text:"Launch"});
-    btn.addEventListener("click",()=>launchInto(r,stat,sel.value));
-    box.appendChild(el("div",{class:"agent"},[
-      el("div",{class:"av",text:initials(r)}),
-      el("div",{class:"main"},[el("div",{class:"nm",text:r}),el("div",{class:"sub",text:"open a terminal as "+r})]),
-      sel, stat, btn,
-    ]));
+// ── HAPPENING ──
+const FEED_KIND={active:["active","🟣"],archived:["archived","✓"],noticed:["noticed","👀"],autopilot:["auto-reply","🤖"]};
+function renderHappening(){
+  const box=document.getElementById("happening");clear(box);
+  const working=HAP.sessions.length;
+  const live=el("div",{class:"live"});
+  live.appendChild(el("span",{class:"pulse"+(working?"":" idle")}));
+  const liveText=el("div");
+  if(working){
+    liveText.appendChild(el("b",{text:HAP.sessions.map(s=>s.role).join(", ")}));
+    liveText.appendChild(document.createTextNode(" working now"));
+  } else liveText.appendChild(document.createTextNode("No agents running right now"));
+  live.appendChild(liveText);
+  if(working){
+    const stopAll=el("button",{class:"btn",style:"margin-left:auto;font-size:12px;padding:5px 11px",text:HAP.sessions.length===1?"Stop":"Stop all"});
+    stopAll.addEventListener("click",()=>HAP.sessions.forEach(s=>post("/api/stop-session",{project:CURRENT,pid:s.pid}).then(refresh)));
+    live.appendChild(stopAll);
+  }
+  box.appendChild(live);
+  if(!HAP.feed.length){box.appendChild(el("div",{class:"ev"},[document.createTextNode("Nothing yet — activity fills in as threads arrive, agents work, and syncs happen.")]));return;}
+  HAP.feed.slice(0,12).forEach(e=>{
+    const k=FEED_KIND[e.kind]||["event","•"];
+    const sub=[e.role?("→"+e.role):"",e.from?("from "+e.from):""].filter(Boolean).join(" · ");
+    box.appendChild(el("div",{class:"ev"},[
+      el("span",{class:"gi",text:k[1]}),
+      el("div",{},[el("b",{text:e.title||e.slug||k[0]}),sub?document.createTextNode(" · "+sub):null]),
+      el("span",{class:"t",text:e.age||""})]));
   });
-  else box.appendChild(el("div",{class:"empty",text:"No roles registered here yet — create one below."}));
-  if(roles.length) api("/api/launch-options?project="+encodeURIComponent(project)).then(o=>{
-    (o.presets||[]).forEach(p=>Object.values(sels).forEach(sel=>
-      sel.appendChild(el("option",{value:p.key,text:p.key}))));
-    const seeded=o.seeded||{};
-    Object.keys(seeded).forEach(r=>{ if(sels[r]) sels[r].value=seeded[r]; });
-  }).catch(()=>{});
-  const formWrap=el("div",{style:"display:none;margin-top:12px"});
-  const toggle=el("button",{class:"disclose",text:"+ New role"});
-  toggle.addEventListener("click",()=>{ const open=formWrap.style.display==="none";
-    formWrap.style.display=open?"":"none"; if(open) buildRoleForm(formWrap); });
-  box.appendChild(toggle); box.appendChild(formWrap);
+}
+
+// ── HEALTH ──
+function renderHealth(){
+  const f=HLT.folder||{},peers=HLT.peers||[];
+  const dot=document.getElementById("h-dot"),line=document.getElementById("h-line");
+  const synced=HLT.sync_ok&&!(f.need_files>0);
+  dot.className="dot "+(HLT.sync_ok===false?"bad":(synced?"ok":"warn"));
+  const ap=HLT.autopilot||{},m=HLT.metrics||{};
+  line.textContent=[
+    HLT.sync_ok===false?"Syncthing offline":(synced?"Everyone in sync":(f.need_files+" file(s) syncing")),
+    (peers.length?peers.filter(p=>p.connected).length+"/"+peers.length+" peer(s) online":"no peers"),
+    "auto-replies "+(ap.enabled?"on":"off"),
+    (m.ttn_median_seconds!=null?("noticed ~"+fmtSecs(m.ttn_median_seconds)):"")
+  ].filter(Boolean).join(" · ");
+  if(!HEALTH_OPEN)return;
+  const body=document.getElementById("health-body");clear(body);
+  // who's connected
+  const who=el("div");
+  const selfSub=el("div",{class:"sub"},[el("span",{class:"mono",text:(OVERVIEW.device_id||"").slice(0,7)+"…"})]);
+  projRoles(CURRENT).forEach(r=>selfSub.appendChild(el("span",{class:"role"+(LIVE_ROLES.has(r)?" active":""),text:r})));
+  who.appendChild(el("div",{class:"agent self"},[el("div",{class:"av",text:initials(OVERVIEW.identity||"me")}),
+    el("div",{class:"main"},[el("div",{class:"nm",text:OVERVIEW.identity||"this machine"}),selfSub]),
+    el("span",{class:"pill you",text:"this machine"})]));
+  if(HLT.sync_ok===false)who.appendChild(el("div",{class:"hsub",text:"Syncthing offline — peers can't be listed."}));
+  else if(!peers.length)who.appendChild(el("div",{class:"hsub",text:"No other machines paired yet — pair one with /codesync-pair."}));
+  else peers.forEach(p=>who.appendChild(el("div",{class:"agent"},[el("div",{class:"av",text:initials(p.name)}),
+    el("div",{class:"main"},[el("div",{class:"nm",text:p.name}),el("div",{class:"sub"},[el("span",{class:"mono",text:p.id_short+"…"}),document.createTextNode(p.connected&&p.address?("  "+p.address):"")])]),
+    el("span",{class:"pill "+(p.connected?"on":"off"),text:p.connected?"connected":"offline"})])));
+  // stat grid
+  const grid=el("div",{class:"hgrid",style:"margin-top:14px"});
+  const cell=(k,v)=>el("div",{class:"hcell"},[el("div",{class:"k",text:k}),el("div",{class:"v",text:v})]);
+  grid.appendChild(cell("Sync",HLT.sync_ok===false?"Offline":(f.need_files>0?(f.need_files+" to sync"):"Up to date")));
+  grid.appendChild(cell("Connected",peers.length?(peers.filter(p=>p.connected).length+" online"):"no peers"));
+  grid.appendChild(cell("Auto-replies",ap.enabled?("On · "+(ap.runs_last_hour||0)+"/hr"):"Off"));
+  grid.appendChild(cell("Time to notice",m.ttn_median_seconds!=null?fmtSecs(m.ttn_median_seconds):"—"));
+  grid.appendChild(cell("Open threads",m.open!=null?String(m.open):"—"));
+  grid.appendChild(cell("Done",m.done!=null?String(m.done):"—"));
+  body.appendChild(who);body.appendChild(grid);
+}
+
+// ── DO (launch / create) ──
+let _launchFor="";
+function launchInto(role,into,cap){
+  clear(into);into.appendChild(el("span",{class:"hint",text:"launching…"}));
+  post("/api/launch-agent",{project:CURRENT,role:role,capability:cap||""}).then(({body})=>{clear(into);
+    if(body.launched)into.appendChild(el("span",{class:"pill on",text:"launched ✓"}));
+    else if(body.copy){into.appendChild(el("div",{class:"hint",text:"Couldn't auto-open a terminal — run this:"}));
+      const cp=el("button",{class:"btn",text:"Copy"});cp.addEventListener("click",()=>navigator.clipboard&&navigator.clipboard.writeText(body.copy).then(()=>cp.textContent="Copied"));
+      into.appendChild(el("div",{class:"did",text:body.copy}));into.appendChild(cp);}
+    else into.appendChild(el("div",{class:"err",text:body.error||body.message||"launch failed"}));
+  }).catch(()=>{clear(into);into.appendChild(el("div",{class:"err",text:"launch failed"}));});
+}
+function renderDo(){
+  if(_launchFor===CURRENT)return;_launchFor=CURRENT;
+  const box=document.getElementById("do");clear(box);
+  const roles=projRoles(CURRENT);
+  const bar=el("div",{class:"dobar"});
+  const newRoleBtn=el("button",{class:"btn",text:"＋ New role"});
+  const formWrap=el("div",{class:"panel",style:"display:none"});
+  newRoleBtn.addEventListener("click",()=>{const open=formWrap.style.display==="none";formWrap.style.display=open?"":"none";if(open)buildRoleForm(formWrap);});
+  bar.appendChild(newRoleBtn);box.appendChild(bar);
+  if(!roles.length){box.appendChild(el("div",{class:"empty",text:"No roles here yet — create one above."}));box.appendChild(formWrap);return;}
+  const sels={};
+  const list=el("div",{class:"panel"});
+  roles.forEach(r=>{
+    const stat=el("div",{style:"display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"});
+    const sel=el("select",{title:"capability — what tools this agent may use",style:"margin-left:auto;padding:5px 8px;border-radius:8px;background:var(--card);color:var(--text);border:1px solid var(--border)"});
+    sel.appendChild(el("option",{value:"",text:"unrestricted"}));sels[r]=sel;
+    const btn=el("button",{class:"btn",text:"Launch"});btn.addEventListener("click",()=>launchInto(r,stat,sel.value));
+    list.appendChild(el("div",{class:"agent"},[el("div",{class:"av",text:initials(r)}),
+      el("div",{class:"main"},[el("div",{class:"nm",text:r}),el("div",{class:"sub",text:"open a terminal as "+r})]),sel,stat,btn]));
+  });
+  box.appendChild(list);box.appendChild(formWrap);
+  api("/api/launch-options?project="+encodeURIComponent(CURRENT)).then(o=>{
+    (o.presets||[]).forEach(p=>Object.values(sels).forEach(sel=>sel.appendChild(el("option",{value:p.key,text:p.key}))));
+    const seeded=o.seeded||{};Object.keys(seeded).forEach(r=>{if(sels[r])sels[r].value=seeded[r];});}).catch(()=>{});
 }
 function buildRoleForm(wrap){
-  if(wrap.dataset.built) return; wrap.dataset.built="1";
-  const name=el("input",{type:"text",placeholder:"role name (e.g. data-eng — lowercase, dashes)",style:FIN});
-  const cat=el("select",{style:FIN}); cat.appendChild(el("option",{value:"",text:"start from a catalog role… (optional)"}));
-  const owns=el("textarea",{placeholder:"Owns — one per line",rows:"3",style:FIN});
-  const notowns=el("textarea",{placeholder:"Does not own — one per line",rows:"2",style:FIN});
-  const go=el("button",{class:"btn",text:"Create + launch"});
-  const msg=el("div",{style:"margin-top:8px"});
-  api("/api/roles").then(c=>(c.categories||[]).forEach(g=>(g.roles||[]).forEach(r=>{
-    const o=el("option",{value:r.name,text:g.name+" · "+(r.display||r.name)}); o._r=r; cat.appendChild(o);
-  }))).catch(()=>{});
-  cat.addEventListener("change",()=>{ const o=cat.selectedOptions[0];
-    if(o&&o._r){ if(!name.value)name.value=o._r.name; owns.value=(o._r.owns||[]).join("\n"); notowns.value=(o._r.does_not_own||[]).join("\n"); }});
+  if(wrap.dataset.built)return;wrap.dataset.built="1";
+  const name=el("input",{type:"text",placeholder:"role name (e.g. data-eng — lowercase, dashes)",class:"fin"});
+  const cat=el("select",{class:"fin"});cat.appendChild(el("option",{value:"",text:"start from a catalog role… (optional)"}));
+  const owns=el("textarea",{placeholder:"Owns — one per line",rows:"3",class:"fin"});
+  const notowns=el("textarea",{placeholder:"Does not own — one per line",rows:"2",class:"fin"});
+  const go=el("button",{class:"btn primary",text:"Create + launch"});const msg=el("div",{style:"margin-top:8px"});
+  api("/api/roles").then(c=>(c.categories||[]).forEach(g=>(g.roles||[]).forEach(r=>{const o=el("option",{value:r.name,text:g.name+" · "+(r.display||r.name)});o._r=r;cat.appendChild(o);}))).catch(()=>{});
+  cat.addEventListener("change",()=>{const o=cat.selectedOptions[0];if(o&&o._r){if(!name.value)name.value=o._r.name;owns.value=(o._r.owns||[]).join("\n");notowns.value=(o._r.does_not_own||[]).join("\n");}});
   go.addEventListener("click",()=>submitRole(name,owns,notowns,msg,go,false));
   [name,cat,owns,notowns,go,msg].forEach(n=>wrap.appendChild(n));
 }
 function submitRole(name,owns,notowns,msg,go,confirm){
-  // Normalize to the server's role-name shape (^[a-z0-9][a-z0-9_-]*$) instead of
-  // rejecting: lowercase, runs of other chars → a dash, trim edge dashes.
-  // "Reviewer" → "reviewer", "Tech Writer" → "tech-writer".
-  const role=(name.value||"").trim().toLowerCase().replace(/[^a-z0-9_-]+/g,"-").replace(/^-+|-+$/g,"");
-  name.value=role;   // show the cleaned name that will actually be created
-  const ow=owns.value.split("\n").map(s=>s.trim()).filter(Boolean);
-  const no=notowns.value.split("\n").map(s=>s.trim()).filter(Boolean);
-  clear(msg);
-  if(!role){ msg.appendChild(el("div",{class:"err",text:"Enter a role name — lowercase letters, digits, and dashes."})); return; }
-  go.disabled=true; go.textContent="Creating…";
+  const role=(name.value||"").trim().toLowerCase().replace(/[^a-z0-9_-]+/g,"-").replace(/^-+|-+$/g,"");name.value=role;
+  const ow=owns.value.split("\n").map(s=>s.trim()).filter(Boolean),no=notowns.value.split("\n").map(s=>s.trim()).filter(Boolean);
+  clear(msg);if(!role){msg.appendChild(el("div",{class:"err",text:"Enter a role name — lowercase letters, digits, dashes."}));return;}
+  go.disabled=true;go.textContent="Creating…";
   post("/api/create-role",{project:CURRENT,role:role,owns:ow,not_owns:no,confirm:confirm}).then(({body})=>{
-    go.disabled=false; go.textContent="Create + launch"; clear(msg);
-    if(body.created){ const into=el("div",{style:"margin-top:8px"});
-      msg.appendChild(el("div",{class:"sub",text:'Role "'+role+'" created. Launching…'})); msg.appendChild(into);
-      // launch into the live form message (don't rebuild the panel here — that
-      // would detach `into` before launchInto writes its result). The new role
-      // joins the launch list the next time the panel is built (reopen detail).
-      launchInto(role,into); return; }
-    if(body.needs_confirm){
-      const tokens=(body.overlaps||[]).map(o=>o.role+" ("+(o.shared||[]).join(", ")+")").join("; ");
-      msg.appendChild(el("div",{class:"warnline",text:"Owns overlaps existing role(s): "+tokens+". Use /codesync-role-new for a full review, or:"}));
-      const anyway=el("button",{class:"btn",text:"Create anyway"});
-      anyway.addEventListener("click",()=>submitRole(name,owns,notowns,msg,go,true));
-      msg.appendChild(anyway); return;
-    }
+    go.disabled=false;go.textContent="Create + launch";clear(msg);
+    if(body.created){const into=el("div",{style:"margin-top:8px"});msg.appendChild(el("div",{class:"hint",text:'Role "'+role+'" created. Launching…'}));msg.appendChild(into);launchInto(role,into);return;}
+    if(body.needs_confirm){const tk=(body.overlaps||[]).map(o=>o.role+" ("+(o.shared||[]).join(", ")+")").join("; ");
+      msg.appendChild(el("div",{class:"hint",text:"Owns overlaps: "+tk+". Use /codesync-role-new for a full review, or:"}));
+      const a=el("button",{class:"btn",text:"Create anyway"});a.addEventListener("click",()=>submitRole(name,owns,notowns,msg,go,true));msg.appendChild(a);return;}
     msg.appendChild(el("div",{class:"err",text:body.error||body.message||"create failed"}));
-  }).catch(()=>{ go.disabled=false; go.textContent="Create + launch"; msg.appendChild(el("div",{class:"err",text:"create failed"})); });
+  }).catch(()=>{go.disabled=false;go.textContent="Create + launch";msg.appendChild(el("div",{class:"err",text:"create failed"}));});
 }
 
-// ── poll loop ────────────────────────────────────────────────────────────────
+// ── poll loop ──
 function refresh(){
-  api("/api/overview").then(o=>{renderHeader(o); if(VIEW==="list") renderProjects(o);}).catch(showDown);
-  api("/api/pending").then(renderPending).catch(()=>{});
-  if(VIEW==="detail" && CURRENT){
+  api("/api/overview").then(o=>{OVERVIEW=o;if(VIEW==="list")renderProjects(o);renderGlance();}).catch(()=>{});
+  if(VIEW==="detail"&&CURRENT){
     const q="?project="+encodeURIComponent(CURRENT);
-    // the default view needs only threads (→ "waiting for you")
-    api("/api/threads"+q).then(d=>{ renderWaiting(d); if(DETAILS) renderThreads(d); }).catch(()=>{});
-    // the heavy operational panels load only when System details is open
-    if(DETAILS){
-      renderLaunch(CURRENT);   // operator launch/create panel (no fetch; built once per project)
-      api("/api/peers"+q).then(renderAgents).catch(()=>{});
-      api("/api/sessions"+q).then(d=>renderSessions(d.sessions||[])).catch(()=>{});
-      api("/api/reviews"+q).then(d=>renderReviews(d.reviews||[])).catch(()=>{});
-      api("/api/activity"+q).then(renderActivityFull).catch(()=>{});
-    }
-  }
-  document.getElementById("updated").textContent="updated "+new Date().toLocaleTimeString();
+    api("/api/pending").then(d=>{NY.pending=d.pending||[];renderNeedsYou();renderGlance();}).catch(()=>{});
+    api("/api/threads"+q).then(d=>{NY.waiting=(d.threads||[]).filter(t=>t.status!=="done");renderNeedsYou();renderGlance();}).catch(()=>{});
+    api("/api/reviews"+q).then(d=>{NY.reviews=(d.reviews||[]).filter(r=>r.status==="pending"||r.status==="blocked");renderNeedsYou();renderGlance();}).catch(()=>{});
+    api("/api/sessions"+q).then(d=>{HAP.sessions=d.sessions||[];LIVE_ROLES=new Set(HAP.sessions.map(s=>s.role));renderHappening();renderHealth();renderGlance();}).catch(()=>{});
+    api("/api/peers"+q).then(d=>{HLT.peers=d.peers||[];HLT.folder=d.folder||{};HLT.sync_ok=d.syncthing_ok;renderHealth();renderGlance();}).catch(()=>{});
+    api("/api/activity"+q).then(d=>{NY.conflicts=d.conflicts||[];HAP.feed=d.feed||[];HLT.autopilot=d.autopilot||{};HLT.metrics=d.metrics||{};
+      renderNeedsYou();renderHappening();renderHealth();renderGlance();}).catch(()=>{});
+    renderDo();
+  } else { api("/api/pending").then(d=>{NY.pending=d.pending||[];}).catch(()=>{}); }
+  renderGlance();
 }
-function showDown(){ /* server unreachable — keep last view; dot lives in details */ }
-
-refresh();
-setInterval(refresh,4000);
+refresh();setInterval(refresh,4000);
 </script>
 </body>
 </html>

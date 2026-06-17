@@ -150,13 +150,18 @@ def gather_peers(cfg, project_name):
         return {"syncthing_ok": syncthing_reachable(cfg), "peers": []}
     folder_id = proj.get("folder_id", "")
     self_id = cfg.get("device_id", "")
+    # A local-only project has no Syncthing folder. Querying /folders/ with an
+    # empty id returns the whole folders LIST, not a dict — so short-circuit to
+    # "reachable, no peers" rather than crash on folder.get(...).
+    if not folder_id:
+        return {"syncthing_ok": syncthing_reachable(cfg), "peers": []}
 
     folder = _syncthing_get(cfg, f"/rest/config/folders/{folder_id}")
-    if folder is None:
-        return {"syncthing_ok": False, "peers": []}
+    if not isinstance(folder, dict):
+        return {"syncthing_ok": syncthing_reachable(cfg), "peers": []}
 
     folder_devs = [d.get("deviceID") for d in folder.get("devices", [])
-                   if d.get("deviceID") and d.get("deviceID") != self_id]
+                   if isinstance(d, dict) and d.get("deviceID") and d.get("deviceID") != self_id]
     conns = (_syncthing_get(cfg, "/rest/system/connections") or {}).get("connections", {})
     all_devs_list = _syncthing_get(cfg, "/rest/config/devices") or []
     all_devs = {d.get("deviceID"): d for d in all_devs_list if isinstance(d, dict)}
@@ -181,8 +186,12 @@ def gather_folder_status(cfg, project_name):
     proj = (cfg.get("projects") or {}).get(project_name)
     if not proj:
         return {"syncthing_ok": False}
-    fstat = _syncthing_get(cfg, f"/rest/db/status?folder={proj.get('folder_id','')}")
-    if fstat is None:
+    folder_id = proj.get("folder_id", "")
+    if not folder_id:                       # local-only project (not shared)
+        return {"syncthing_ok": syncthing_reachable(cfg),
+                "state": "local only", "local_files": 0, "global_files": 0, "need_files": 0}
+    fstat = _syncthing_get(cfg, f"/rest/db/status?folder={folder_id}")
+    if not isinstance(fstat, dict):
         return {"syncthing_ok": False}
     return {
         "syncthing_ok": True,
