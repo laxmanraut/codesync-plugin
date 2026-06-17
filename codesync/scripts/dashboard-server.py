@@ -55,6 +55,7 @@ PAIR_PEER = os.path.join(SCRIPT_DIR, "pair-peer.sh").replace("\\", "/")
 LAUNCH_AGENT = os.path.join(SCRIPT_DIR, "launch-agent.sh").replace("\\", "/")
 REGISTER_ROLE = os.path.join(SCRIPT_DIR, "register-role-in-config.sh").replace("\\", "/")
 AUTONOMY_REVIEW = os.path.join(SCRIPT_DIR, "autonomy-review.sh").replace("\\", "/")
+AUTONOMY_DIFF = os.path.join(SCRIPT_DIR, "autonomy-diff.sh").replace("\\", "/")
 ROLES_JSON = os.path.join(SCRIPT_DIR, "lib", "roles.json")
 
 # ── Capability presets (control-panel Layer 2) ───────────────────────────────
@@ -213,6 +214,18 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/api/reviews":
             self._json({"project": project,
                         "reviews": state.gather_reviews(_ctx["config_dir"], project)})
+        elif u.path == "/api/review-diff":
+            # Read-only diff of a review entry's branch (token-gated like all GETs).
+            rid = qs.get("id", [""])[0]
+            if state.review_path(_ctx["config_dir"], project, rid) is None:
+                self._json({"ok": False, "error": "unknown review id"}, 404)
+            else:
+                try:
+                    ok, out, err = self._run_bash([AUTONOMY_DIFF, "--project", project, "--id", rid])
+                    self._json({"ok": ok, "id": rid, "diff": out if ok else "",
+                                "error": "" if ok else err[-300:]})
+                except Exception as e:
+                    self._json({"ok": False, "error": f"{type(e).__name__}"}, 500)
         elif u.path == "/api/threads":
             self._json({"project": project,
                         "threads": state.gather_threads(cfg, project)})

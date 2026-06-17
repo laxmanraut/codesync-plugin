@@ -402,6 +402,17 @@ function renderReviews(list){
       el("div",{class:"main"},[el("div",{class:"nm",text:r.summary||r.branch||r.id}),sub]),
       stat,
     ]);
+    // View diff — you should never approve agent code you can't see.
+    const diffBox=el("pre",{style:"display:none;white-space:pre-wrap;max-height:320px;overflow:auto;font-family:var(--mono);font-size:12px;margin-top:8px;padding:8px;border-radius:8px;background:rgba(127,127,127,.08)"});
+    const df=el("button",{class:"btn",text:"Diff"});
+    df.addEventListener("click",()=>{
+      if(diffBox.style.display!=="none"){ diffBox.style.display="none"; return; }
+      diffBox.style.display=""; diffBox.textContent="loading…";
+      api("/api/review-diff?project="+encodeURIComponent(CURRENT)+"&id="+encodeURIComponent(r.id))
+        .then(d=>{ diffBox.textContent=(d.diff&&d.diff.trim())?d.diff:(d.error||"(no diff)"); })
+        .catch(()=>{ diffBox.textContent="(failed to load diff)"; });
+    });
+    stat.appendChild(df);
     if(blocked){ stat.appendChild(el("span",{class:"pill",text:"blocked"})); }
     else {
       const ap=el("button",{class:"btn",text:"Approve"});
@@ -411,7 +422,8 @@ function renderReviews(list){
     const rj=el("button",{class:"btn",text:"Reject"});
     rj.addEventListener("click",()=>reviewAction(r.id,"reject",stat,rj));
     stat.appendChild(rj);
-    box.appendChild(row);
+    const wrap=el("div"); wrap.appendChild(row); wrap.appendChild(diffBox);
+    box.appendChild(wrap);
   });
 }
 function reviewAction(id,action,into,btn){

@@ -237,6 +237,9 @@ t_eq "review-action bad action → 400" "400" \
   "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","id":"x","action":"nuke"}' "$B/api/review-action")"
 t_eq "review-action unknown id → 404" "404" \
   "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","id":"ghost-20260101-000000","action":"reject"}' "$B/api/review-action")"
+t_eq "review-diff WITHOUT token → 403" "403" "$(code "$B/api/review-diff?project=testproj&id=backend-20260101-000000")"
+t_eq "review-diff unknown id → 404" "404" \
+  "$(code -H "X-CSDash-Token: $TOKEN" "$B/api/review-diff?project=testproj&id=ghost-20260101-000000")"
 
 cleanup
 rm -f "$STATE"

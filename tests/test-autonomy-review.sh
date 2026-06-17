@@ -25,13 +25,15 @@ codesync_autonomy_ensure_clone "$SRC" "$CLONE" >/dev/null
 make_entry() {  # id  status  changefile
   local id="$1" status="$2" file="$3" br="codesync/auto/backend/$1"
   git -C "$CLONE" checkout -q -B "$br" origin/main
+  local base; base=$(git -C "$CLONE" rev-parse HEAD)
   echo data > "$CLONE/$file"; git -C "$CLONE" add "$file"
   git -C "$CLONE" -c user.email=a@a -c user.name=a commit -q -m "auto: $file"
-  $PY_BIN - "$REVDIR" "$id" "$status" "$br" "$CLONE" <<'PY'
+  local head; head=$(git -C "$CLONE" rev-parse HEAD)
+  $PY_BIN - "$REVDIR" "$id" "$status" "$br" "$CLONE" "$base" "$head" <<'PY'
 import sys, os, json
-rd, rid, status, br, clone = sys.argv[1:6]
+rd, rid, status, br, clone, base, head = sys.argv[1:8]
 json.dump({"id":rid,"project":"testproj","role":"backend","branch":br,"base_branch":"main",
-           "clone_dir":clone,"status":status,"created":"2026-06-16T00:00:00Z",
+           "clone_dir":clone,"base":base,"head":head,"status":status,"created":"2026-06-16T00:00:00Z",
            "summary":"auto change","secrets":(["secret.pem"] if status=="blocked" else [])},
           open(os.path.join(rd, rid+".json"), "w"), indent=2)
 PY
@@ -61,6 +63,14 @@ BO=$(bash "$SCRIPTS/autonomy-review.sh" --project testproj --id backend-20260616
 t_contains "secret-flagged entry refuses approve" "BLOCKED" "$BO"
 t_refute  "blocked branch was NOT landed in the local repo" \
   git -C "$SRC" rev-parse --verify --quiet codesync/auto/backend/backend-20260616-120000
+
+# ── diff view (T7): the read-only diff script shows an entry's change ──
+make_entry "backend-20260616-130000" pending difffile.txt
+DF=$(bash "$SCRIPTS/autonomy-diff.sh" --project testproj --id backend-20260616-130000 2>&1)
+t_contains "review diff names the changed file" "difffile.txt" "$DF"
+t_contains "review diff shows the added content" "+data" "$DF"
+t_contains "review diff unknown id errors" "unknown review id" \
+  "$(bash "$SCRIPTS/autonomy-diff.sh" --project testproj --id ghost-20260101-000000 2>&1)"
 
 # ── state-level: secret_denylist_hits + expire_reviews ──
 ST=$($PY_BIN - "$SCRIPTS/lib" "$CD" <<'PY'
