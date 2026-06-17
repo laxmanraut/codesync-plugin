@@ -226,6 +226,19 @@ class Handler(BaseHTTPRequestHandler):
                                 "error": "" if ok else err[-300:]})
                 except Exception as e:
                     self._json({"ok": False, "error": f"{type(e).__name__}"}, 500)
+        elif u.path == "/api/docs":
+            pp = ((cfg.get("projects") or {}).get(project) or {}).get("path", "")
+            self._json({"project": project,
+                        "docs": state.list_project_docs(pp) if pp and os.path.isdir(pp) else []})
+        elif u.path == "/api/doc":
+            pp = ((cfg.get("projects") or {}).get(project) or {}).get("path", "")
+            name = qs.get("name", [""])[0]
+            if not pp or state.resolve_doc_path(pp, name) is None:
+                self._json({"ok": False, "error": "invalid document"}, 400)
+            else:
+                c = state.read_project_doc(pp, name)
+                self._json({"ok": True, "name": name, "content": c if c is not None else "",
+                            "exists": c is not None})
         elif u.path == "/api/threads":
             self._json({"project": project,
                         "threads": state.gather_threads(cfg, project)})
@@ -296,6 +309,26 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return
             self._create_role(body)
+            return
+
+        # doc-save / doc-delete: edit a project's rules & docs (allowlisted files).
+        if u.path == "/api/doc-save":
+            if not self._post_gate():
+                return
+            _touch()
+            body = self._read_json_body()
+            if body is None:
+                return
+            self._doc_write(body, "save")
+            return
+        if u.path == "/api/doc-delete":
+            if not self._post_gate():
+                return
+            _touch()
+            body = self._read_json_body()
+            if body is None:
+                return
+            self._doc_write(body, "delete")
             return
 
         # review-action: approve/reject an autonomy review entry (two-gate).
@@ -395,6 +428,31 @@ class Handler(BaseHTTPRequestHandler):
                 if key:
                     seeded[role] = key
         return {"project": project, "presets": presets, "seeded": seeded}
+
+    def _doc_write(self, body, op):
+        """POST /api/doc-save {project,name,content} | /api/doc-delete {project,name}.
+        Allowlist (state.resolve_doc_path): only GUARDRAILS.md / CLAUDE.md /
+        _docs/<safe>.md, resolved INSIDE the project folder — no traversal. Writes
+        go to the synced folder, so they reach the team like any project file."""
+        cfg = state.load_config(_ctx["config"])
+        project = self._require(body, "project", state._NAME_RE)
+        if project is None:
+            return
+        proj = (cfg.get("projects") or {}).get(project)
+        if not proj:
+            self._json({"ok": False, "error": "unknown project"}, 400)
+            return
+        pp = proj.get("path", "")
+        if not pp or not os.path.isdir(pp):
+            self._json({"ok": False, "error": "project not on this machine"}, 409)
+            return
+        name = body.get("name")
+        if op == "delete":
+            ok, err = state.delete_project_doc(pp, name)
+        else:
+            content = body.get("content")
+            ok, err = state.write_project_doc(pp, name, content if isinstance(content, str) else "")
+        self._json({"ok": ok, "name": name, "error": "" if ok else err}, 200 if ok else 400)
 
     def _review_action(self, body):
         """POST /api/review-action {project, id, action: approve|reject}. Allowlist

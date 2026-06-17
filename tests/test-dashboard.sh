@@ -241,6 +241,35 @@ t_eq "review-diff WITHOUT token → 403" "403" "$(code "$B/api/review-diff?proje
 t_eq "review-diff unknown id → 404" "404" \
   "$(code -H "X-CSDash-Token: $TOKEN" "$B/api/review-diff?project=testproj&id=ghost-20260101-000000")"
 
+# ── project rules & docs editor (allowlisted file writes) ──
+t_eq "docs WITHOUT token → 403" "403" "$(code "$B/api/docs?project=testproj")"
+DOCS=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/docs?project=testproj")
+t_contains "docs lists GUARDRAILS.md" 'GUARDRAILS.md' "$DOCS"
+t_contains "docs lists CLAUDE.md"     'CLAUDE.md' "$DOCS"
+t_eq "doc-save with ?t= but no header → 403" "403" \
+  "$(code -X POST -H "$J" -d '{"project":"testproj","name":"GUARDRAILS.md","content":"x"}' "$B/api/doc-save?t=$TOKEN")"
+SR=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"GUARDRAILS.md","content":"# Rules\nNo billing edits."}' "$B/api/doc-save")
+t_contains "doc-save writes GUARDRAILS.md" '"ok": true' "$SR"
+t_assert  "GUARDRAILS.md exists on disk"   test -f "$PROJ/GUARDRAILS.md"
+RB=$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/doc?project=testproj&name=GUARDRAILS.md")
+t_contains "doc reads the content back" 'No billing edits' "$RB"
+# SECURITY: traversal / non-allowlisted names are refused, nothing escapes the project
+t_eq "doc-save absolute-traversal name → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"../../../tmp/cs-evil.md","content":"x"}' "$B/api/doc-save")"
+t_eq "doc-save _docs traversal → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"_docs/../../cs-evil.md","content":"x"}' "$B/api/doc-save")"
+t_eq "doc-save non-.md name → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"_docs/evil.sh","content":"x"}' "$B/api/doc-save")"
+t_refute "traversal write did NOT escape the project" test -f "/tmp/cs-evil.md"
+# _docs create + delete; CLAUDE.md protected
+curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"_docs/notes.md","content":"hi"}' "$B/api/doc-save" >/dev/null
+t_assert "_docs/notes.md created" test -f "$PROJ/_docs/notes.md"
+DD=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"_docs/notes.md"}' "$B/api/doc-delete")
+t_contains "doc-delete removes a _docs file" '"ok": true' "$DD"
+t_refute  "_docs/notes.md is gone" test -f "$PROJ/_docs/notes.md"
+DC=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"CLAUDE.md"}' "$B/api/doc-delete")
+t_contains "CLAUDE.md delete is refused" "can't be deleted" "$DC"
+
 cleanup
 rm -f "$STATE"
 t_done

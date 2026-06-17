@@ -212,6 +212,13 @@
       <div id="do"><div class="dobar"><span class="empty">…</span></div></div>
     </section>
 
+    <section class="zone">
+      <div class="zlabel">Project rules &amp; docs</div>
+      <div id="docs-list"><div class="empty">…</div></div>
+      <div id="doc-editor"></div>
+      <div class="hsub">Edits save to the synced project folder, so your teammates get them. GUARDRAILS.md binds every agent (autonomous agents have it injected); the hard limit is still each role's tool scope.</div>
+    </section>
+
     <section class="health">
       <div class="hsum" id="health-sum"><span class="dot" id="h-dot"></span> <span id="h-line">…</span><span class="chev">▾</span></div>
       <div class="hbody" id="health-body"></div>
@@ -260,7 +267,9 @@ function showDetail(n){VIEW="detail";CURRENT=n;HEALTH_OPEN=false;VIEWED.clear();
   document.getElementById("health-sum").classList.remove("open");
   ["needs","happening","do"].forEach(id=>{const b=document.getElementById(id);clear(b);b.appendChild(el("div",{class:"empty",text:"…"}));});
   _nySig=null;document.getElementById("needs").dataset.built="";   // force a fresh build for the new project
-  _launchFor="";
+  _launchFor="";_docsFor="";
+  clear(document.getElementById("doc-editor"));
+  document.getElementById("docs-list").appendChild(el("div",{class:"empty",text:"…"}));
   refresh();}
 document.getElementById("g-projbtn").addEventListener("click",showList);
 document.getElementById("health-sum").addEventListener("click",()=>{
@@ -709,6 +718,69 @@ function submitRole(name,owns,notowns,msg,go,confirm){
   }).catch(()=>{go.disabled=false;go.textContent="Create + launch";msg.appendChild(el("div",{class:"err",text:"create failed"}));});
 }
 
+// ── project rules & docs editor ──
+let _docsFor="";
+function loadDocs(){ api("/api/docs?project="+encodeURIComponent(CURRENT)).then(d=>renderDocList(d.docs||[])).catch(()=>{}); }
+function renderDocList(list){
+  const box=document.getElementById("docs-list");clear(box);
+  const wrap=el("div",{class:"feed"});
+  list.forEach(d=>{
+    const right=el("span",{class:"t"});
+    const edit=el("button",{class:"btn",style:"font-size:12px;padding:4px 10px",text:d.exists?"Edit":"Create"});
+    edit.addEventListener("click",()=>openDoc(d.name));
+    right.appendChild(edit);
+    if(d.exists && d.name!=="CLAUDE.md"){
+      const del=el("button",{class:"btn ghostred",style:"font-size:12px;padding:4px 10px;margin-left:6px",text:"Delete"});
+      del.addEventListener("click",()=>docDelete(d.name,del));
+      right.appendChild(del);
+    }
+    wrap.appendChild(el("div",{class:"ev"},[
+      el("span",{class:"gi",text:"📄"}),
+      el("div",{},[el("b",{text:d.name}),document.createTextNode(d.exists?(" · "+d.size+" B"):" · not created")]),
+      right]));
+  });
+  const add=el("button",{class:"btn",style:"margin:10px 0 0",text:"＋ New doc"});
+  add.addEventListener("click",newDoc);
+  box.appendChild(wrap);box.appendChild(add);
+}
+function openDoc(name){
+  const ed=document.getElementById("doc-editor");clear(ed);
+  ed.appendChild(el("div",{class:"hint",style:"margin-top:12px",text:"loading "+name+"…"}));
+  api("/api/doc?project="+encodeURIComponent(CURRENT)+"&name="+encodeURIComponent(name)).then(d=>{
+    clear(ed);
+    const ta=el("textarea",{class:"fin",rows:"16",style:"font-family:var(--mono);font-size:12.5px"});ta.value=d.content||"";
+    const save=el("button",{class:"btn primary",text:"Save"}),cancel=el("button",{class:"btn",text:"Close"});
+    const msg=el("div",{style:"margin-top:6px"});
+    save.addEventListener("click",()=>{save.disabled=true;save.textContent="Saving…";clear(msg);
+      post("/api/doc-save",{project:CURRENT,name:name,content:ta.value}).then(({body})=>{
+        save.disabled=false;save.textContent="Save";
+        if(body.ok){msg.appendChild(el("span",{class:"pill on",text:"saved ✓"}));loadDocs();}
+        else msg.appendChild(el("div",{class:"err",text:body.error||"save failed"}));});});
+    cancel.addEventListener("click",()=>clear(ed));
+    ed.appendChild(el("div",{class:"zlabel",style:"margin-top:14px",text:"Editing "+name}));
+    ed.appendChild(ta);ed.appendChild(el("div",{class:"dobar"},[save,cancel]));ed.appendChild(msg);
+  }).catch(()=>{clear(ed);ed.appendChild(el("div",{class:"err",text:"could not open "+name}));});
+}
+function newDoc(){
+  const ed=document.getElementById("doc-editor");clear(ed);
+  const nameIn=el("input",{class:"fin",placeholder:"doc name (e.g. architecture) — becomes _docs/<name>.md"});
+  const msg=el("div",{style:"margin-top:6px"});
+  const next=el("button",{class:"btn primary",text:"Create + edit"});
+  next.addEventListener("click",()=>{
+    const base=(nameIn.value||"").trim().toLowerCase().replace(/[^a-z0-9 _-]+/g,"-").replace(/^-+|-+$/g,"");
+    if(!base){clear(msg);msg.appendChild(el("div",{class:"err",text:"Enter a name (letters, digits, dashes)."}));return;}
+    openDoc("_docs/"+base+".md");});
+  ed.appendChild(el("div",{class:"zlabel",style:"margin-top:14px",text:"New doc"}));
+  ed.appendChild(nameIn);ed.appendChild(el("div",{class:"dobar"},[next]));ed.appendChild(msg);
+}
+function docDelete(name,btn){
+  btn.disabled=true;btn.textContent="…";
+  post("/api/doc-delete",{project:CURRENT,name:name}).then(({body})=>{
+    if(body.ok){loadDocs();clear(document.getElementById("doc-editor"));}
+    else{btn.disabled=false;btn.textContent="Delete";alert(body.error||"delete failed");}
+  }).catch(()=>{btn.disabled=false;btn.textContent="Delete";});
+}
+
 // ── poll loop ──
 function refresh(){
   api("/api/overview").then(o=>{OVERVIEW=o;if(VIEW==="list")renderProjects(o);renderGlance();}).catch(()=>{});
@@ -722,6 +794,7 @@ function refresh(){
     api("/api/activity"+q).then(d=>{NY.conflicts=d.conflicts||[];HAP.feed=d.feed||[];HLT.autopilot=d.autopilot||{};HLT.metrics=d.metrics||{};
       renderNeedsYou();renderHappening();renderHealth();renderGlance();}).catch(()=>{});
     renderDo();
+    if(_docsFor!==CURRENT){_docsFor=CURRENT;loadDocs();}   // load once per project (not every poll, so an open editor isn't clobbered)
   } else { api("/api/pending").then(d=>{NY.pending=d.pending||[];}).catch(()=>{}); }
   renderGlance();
 }

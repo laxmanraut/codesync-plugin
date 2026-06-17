@@ -921,6 +921,99 @@ def expire_reviews(config_dir, project, ttl_hours=72, now=None):
     return out
 
 
+# ──────────── project docs editing from the dashboard (rules & docs) ─────────
+# Edit GUARDRAILS.md / CLAUDE.md / _docs/*.md from the browser. The allowlist
+# below is the whole security story: only those exact targets (or a _docs/<safe>
+# .md), and the resolved path MUST be inside the project folder — so a crafted
+# name can never write outside it. Files live in the SYNCED folder, so edits
+# reach the team automatically (same as any other project file).
+_DOC_BASE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _-]*\.md$')
+
+
+def resolve_doc_path(proj_path, name):
+    """Absolute path for an editable project doc, or None if `name` is not on the
+    allowlist or would resolve outside the project folder (traversal guard)."""
+    if not isinstance(name, str) or not name or not proj_path:
+        return None
+    if name in ("GUARDRAILS.md", "CLAUDE.md"):
+        rel = name
+    elif name.startswith("_docs/"):
+        base = name[len("_docs/"):]
+        if "/" in base or not _DOC_BASE_RE.match(base):
+            return None
+        rel = os.path.join("_docs", base)
+    else:
+        return None
+    base_real = os.path.realpath(proj_path)
+    full = os.path.realpath(os.path.join(proj_path, rel))
+    if full != base_real and full.startswith(base_real + os.sep):
+        return full
+    return None
+
+
+def list_project_docs(proj_path):
+    """The editable docs for a project: the two fixed files + every _docs/*.md."""
+    out = []
+    for n in ("GUARDRAILS.md", "CLAUDE.md"):
+        p = os.path.join(proj_path, n)
+        ex = os.path.isfile(p)
+        out.append({"name": n, "exists": ex, "fixed": True,
+                    "size": os.path.getsize(p) if ex else 0})
+    docs_dir = os.path.join(proj_path, "_docs")
+    if os.path.isdir(docs_dir):
+        for fn in sorted(os.listdir(docs_dir)):
+            if fn.endswith(".md") and resolve_doc_path(proj_path, "_docs/" + fn):
+                p = os.path.join(docs_dir, fn)
+                out.append({"name": "_docs/" + fn, "exists": True, "fixed": False,
+                            "size": os.path.getsize(p)})
+    return out
+
+
+def read_project_doc(proj_path, name):
+    p = resolve_doc_path(proj_path, name)
+    if not p or not os.path.isfile(p):
+        return None
+    try:
+        with open(p, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def write_project_doc(proj_path, name, content):
+    """Atomically write an allowlisted project doc. (ok, error)."""
+    p = resolve_doc_path(proj_path, name)
+    if not p:
+        return False, "invalid document name"
+    if not isinstance(content, str):
+        return False, "content required"
+    if len(content) > 262144:
+        return False, "document too large (256KB max)"
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(content)
+    os.replace(tmp, p)
+    return True, ""
+
+
+def delete_project_doc(proj_path, name):
+    """Delete an allowlisted project doc. CLAUDE.md is protected (it wires the
+    GUARDRAILS import); everything else on the allowlist may be removed."""
+    if name == "CLAUDE.md":
+        return False, "CLAUDE.md can't be deleted here (it imports your rules)"
+    p = resolve_doc_path(proj_path, name)
+    if not p:
+        return False, "invalid document name"
+    if not os.path.isfile(p):
+        return False, "not found"
+    try:
+        os.remove(p)
+    except OSError:
+        return False, "could not delete"
+    return True, ""
+
+
 # ──────────────── sync-conflict surfacing (launch-agents T1) ────────────────
 def gather_conflicts(cfg, project_name):
     """Syncthing *.sync-conflict-* files anywhere under the project.
