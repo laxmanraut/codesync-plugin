@@ -206,8 +206,28 @@ PY
   __n=$(printf '%s\n' "$__cands" | wc -l | tr -d ' ')
   logln "RUN role=$__role branch=$__branch model=$MODEL tools=[$__tools] candidates=$__n"
 
-  __prompt="You are the codesync AUTONOMOUS agent for role '$__role' in project '$PROJECT'. You run UNATTENDED in an ISOLATED CLONE on branch '$__branch' — your work does NOT reach anyone until a human reviews and merges it. Work the tasks below using ONLY your allowed tools (edit files in the current directory). You do NOT need to commit or push — codesync captures your file changes for review automatically. Do NOT touch anything outside this repo.
+  # Binding project + role rules (synced files → shared with the whole team).
+  # The agent works in the CLONE, not the synced folder, so it can't auto-load
+  # these — inject them into the prompt every run. Capped so a long rules file
+  # can't blow up the prompt. GUARDRAILS.md = project-wide; _roles/<role>.md =
+  # this role's scope. (Tool scope via --allowedTools is still the HARD limit;
+  # these are the human-authored contract on top.)
+  __rules=""
+  if [ -f "$PROJ_PATH/GUARDRAILS.md" ]; then
+    __rules="$__rules
+=== PROJECT RULES for '$PROJECT' (BINDING — you MUST follow these) ===
+$(head -c 8000 "$PROJ_PATH/GUARDRAILS.md")
+"
+  fi
+  if [ -f "$PROJ_PATH/_roles/$__role.md" ]; then
+    __rules="$__rules
+=== YOUR ROLE '$__role' (stay within what it Owns; do not touch what it does NOT own) ===
+$(head -c 4000 "$PROJ_PATH/_roles/$__role.md")
+"
+  fi
 
+  __prompt="You are the codesync AUTONOMOUS agent for role '$__role' in project '$PROJECT'. You run UNATTENDED in an ISOLATED CLONE on branch '$__branch' — your work does NOT reach anyone until a human reviews and merges it. Work the tasks below using ONLY your allowed tools (edit files in the current directory). You do NOT need to commit or push — codesync captures your file changes for review automatically. Do NOT touch anything outside this repo.
+$__rules
 Task threads (under $PROJ_PATH):
 $__cands
 

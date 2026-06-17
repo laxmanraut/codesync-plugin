@@ -116,4 +116,26 @@ t_eq    "runner captures an UNCOMMITTED edit + files a review" "$((NF+1))" "$(co
 t_assert "the runner-committed change is in the clone branch" \
   test -f "$CD/autonomy-clones/testproj/backend/editonly.txt"
 
+# ── Phase G: binding rules — GUARDRAILS.md + the role file are injected into the
+# autonomous agent's prompt (the agent works in the clone and can't auto-load the
+# synced project's rules, so injection is how it "always references" them). ──
+CAP="$T_TMP/prompt-capture.txt"
+FAKE3="$T_TMP/fakeclaude-capture"
+cat > "$FAKE3" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$CAP"     # dump argv (incl. the -p prompt) for assertion
+echo ruletest > ruletest.txt
+printf '{"type":"result","result":"ok","usage":{"input_tokens":1,"output_tokens":1}}\n'
+EOF
+chmod +x "$FAKE3"
+printf 'PROJECT RULE: NEVER touch billing code.\n' > "$PROJ/GUARDRAILS.md"
+mkdir -p "$PROJ/_roles"
+printf '# backend\n\n## Owns\n- plugin tests\n\n## Does not own\n- billing\n' > "$PROJ/_roles/backend.md"
+rm -f "$STATE"
+CODESYNC_AUTONOMY_CLAUDE_BIN="$FAKE3" bash "$SCRIPTS/autonomy-run.sh" >/dev/null 2>&1
+PROMPT=$(cat "$CAP" 2>/dev/null)
+t_contains "agent prompt injects the project GUARDRAILS rules" "NEVER touch billing code" "$PROMPT"
+t_contains "agent prompt marks project rules as BINDING"        "BINDING"                  "$PROMPT"
+t_contains "agent prompt injects the role's Owns scope"         "plugin tests"             "$PROMPT"
+
 t_done

@@ -1,6 +1,6 @@
 {
   "name": "codesync",
-  "version": "0.34.0",
+  "version": "0.35.0",
   "description": "Coordinate work between AI-augmented collaborators across machines. Each project is a peer-to-peer synced folder (via Syncthing) with role-addressed inboxes inside it. Claude agents on each machine pass structured notes, tasks, and decisions to the right collaborator's role — no cloud service, no central server.",
   "author": {
     "name": "laxman"
