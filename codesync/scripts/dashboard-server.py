@@ -56,6 +56,7 @@ LAUNCH_AGENT = os.path.join(SCRIPT_DIR, "launch-agent.sh").replace("\\", "/")
 REGISTER_ROLE = os.path.join(SCRIPT_DIR, "register-role-in-config.sh").replace("\\", "/")
 AUTONOMY_REVIEW = os.path.join(SCRIPT_DIR, "autonomy-review.sh").replace("\\", "/")
 AUTONOMY_DIFF = os.path.join(SCRIPT_DIR, "autonomy-diff.sh").replace("\\", "/")
+CREATE_PROJECT = os.path.join(SCRIPT_DIR, "create-project.sh").replace("\\", "/")
 ROLES_JSON = os.path.join(SCRIPT_DIR, "lib", "roles.json")
 
 # ── Capability presets (control-panel Layer 2) ───────────────────────────────
@@ -311,6 +312,17 @@ class Handler(BaseHTTPRequestHandler):
             self._create_role(body)
             return
 
+        # create-project: new synced project (+ Syncthing folder) + repo_url manifest.
+        if u.path == "/api/create-project":
+            if not self._post_gate():
+                return
+            _touch()
+            body = self._read_json_body()
+            if body is None:
+                return
+            self._create_project(body)
+            return
+
         # doc-save / doc-delete: edit a project's rules & docs (allowlisted files).
         if u.path == "/api/doc-save":
             if not self._post_gate():
@@ -428,6 +440,40 @@ class Handler(BaseHTTPRequestHandler):
                 if key:
                     seeded[role] = key
         return {"project": project, "presets": presets, "seeded": seeded}
+
+    def _create_project(self, body):
+        """POST /api/create-project {name, repo_url?}. Validates name (_NAME_RE,
+        not reserved, not already registered) and repo_url shape, then runs
+        create-project.sh (which makes the synced folder, registers the Syncthing
+        folder, seeds docs, and writes the _project.json manifest with repo_url).
+        Needs Syncthing up — create-project.sh errors clearly if it isn't."""
+        cfg = state.load_config(_ctx["config"])
+        name = self._require(body, "name", state._NAME_RE)
+        if name is None:
+            return
+        if name.lower() in state._WIN_RESERVED:
+            self._json({"ok": False, "error": "name is reserved on Windows"}, 400)
+            return
+        if name in (cfg.get("projects") or {}):
+            self._json({"ok": False, "error": "a project with that name already exists"}, 409)
+            return
+        repo_url = body.get("repo_url") or ""
+        if not state.valid_repo_url(repo_url):
+            self._json({"ok": False, "error": "repo_url doesn't look like a git URL"}, 400)
+            return
+        argv = [CREATE_PROJECT, "--name", name]
+        if repo_url:
+            argv += ["--repo-url", repo_url]
+        try:
+            ok, out, err = self._run_bash(argv, timeout=60)
+        except subprocess.TimeoutExpired:
+            self._json({"ok": False, "error": "create timed out"}, 504)
+            return
+        except Exception as e:
+            self._json({"ok": False, "error": f"{type(e).__name__}"}, 500)
+            return
+        self._json({"ok": ok, "name": name, "repo_url": repo_url,
+                    "message": (out if ok else (err or out))[-500:]}, 200 if ok else 500)
 
     def _doc_write(self, body, op):
         """POST /api/doc-save {project,name,content} | /api/doc-delete {project,name}.

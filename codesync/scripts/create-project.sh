@@ -22,6 +22,7 @@ err() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 # 1. Args — accept --name <project>
 PROJECT_NAME=""
+REPO_URL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --name)
@@ -29,12 +30,27 @@ while [ $# -gt 0 ]; do
       PROJECT_NAME="$2"
       shift 2
       ;;
+    --repo-url)
+      [ $# -ge 2 ] || err "--repo-url requires a value"
+      REPO_URL="$2"
+      shift 2
+      ;;
     *)
       shift
       ;;
   esac
 done
-[ -n "$PROJECT_NAME" ] || err "Usage: create-project.sh --name <project-name>"
+[ -n "$PROJECT_NAME" ] || err "Usage: create-project.sh --name <project-name> [--repo-url <git-url>]"
+
+# Validate the repo URL shape (it is later handed to `git clone`).
+if [ -n "$REPO_URL" ]; then
+  VALID=$($PY_BIN - "$SCRIPT_DIR/lib" "$REPO_URL" <<'PY'
+import sys; sys.path.insert(0, sys.argv[1]); import state
+print("yes" if state.valid_repo_url(sys.argv[2]) else "no")
+PY
+)
+  [ "$VALID" = "yes" ] || err "repo-url doesn't look like a git URL (https://, git@host:..., ssh://, git://): $REPO_URL"
+fi
 
 # 2. Validate project name (lowercase, alphanumerics, dash, underscore only)
 if ! printf '%s' "$PROJECT_NAME" | grep -Eq '^[a-z0-9][a-z0-9_-]*$'; then
@@ -135,6 +151,14 @@ with open(cfg_path, "w") as f:
 PY
 chmod 600 "$CFG_FILE"
 log "Added project '$PROJECT_NAME' to $CFG_FILE"
+
+# 9b. Write the synced project manifest (name + repo_url). It lives in the
+# synced folder, so every peer who joins gets the repo_url and can clone.
+$PY_BIN - "$SCRIPT_DIR/lib" "$PROJECT_PATH" "$PROJECT_NAME" "$REPO_URL" <<'PY'
+import sys; sys.path.insert(0, sys.argv[1]); import state
+state.write_project_manifest(sys.argv[2], sys.argv[3], sys.argv[4])
+PY
+[ -n "$REPO_URL" ] && log "Recorded repo: $REPO_URL (peers will clone this)" || true
 
 # 10. Output
 printf '\n'

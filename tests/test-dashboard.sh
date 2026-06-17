@@ -270,6 +270,16 @@ t_refute  "_docs/notes.md is gone" test -f "$PROJ/_docs/notes.md"
 DC=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"CLAUDE.md"}' "$B/api/doc-delete")
 t_contains "CLAUDE.md delete is refused" "can't be deleted" "$DC"
 
+# ── create-project (validation + gate; full creation needs live Syncthing) ──
+t_eq "create-project with ?t= but no header → 403" "403" \
+  "$(code -X POST -H "$J" -d '{"name":"newproj"}' "$B/api/create-project?t=$TOKEN")"
+t_eq "create-project bad name → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"name":"Bad Name"}' "$B/api/create-project")"
+t_eq "create-project duplicate name → 409" "409" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"name":"testproj"}' "$B/api/create-project")"
+t_eq "create-project shell-y repo_url → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"name":"freshproj","repo_url":"not a url; rm -rf /"}' "$B/api/create-project")"
+
 cleanup
 rm -f "$STATE"
 t_done

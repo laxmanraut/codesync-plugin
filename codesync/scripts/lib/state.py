@@ -1014,6 +1014,51 @@ def delete_project_doc(proj_path, name):
     return True, ""
 
 
+# ──────────── project manifest: name + repo_url (synced → shared) ────────────
+# A project's _project.json travels in the synced folder, so every peer who
+# joins gets the repo_url and can clone the code locally (Increment 2). repo_url
+# is validated conservatively because it is later handed to `git clone`.
+_REPO_URL_RE = re.compile(r'^(https?://|git@[\w.-]+:|ssh://|git://)[\w.@:/~%+\-]+$')
+
+
+def valid_repo_url(url):
+    """Conservative git-URL check. Accepts https/http/ssh/git/scp-style URLs and
+    rejects anything with whitespace or shell metacharacters (it is later passed
+    to `git clone`). Empty is allowed — a project may have no code repo."""
+    if url in (None, ""):
+        return True
+    if not isinstance(url, str) or len(url) > 512:
+        return False
+    return bool(_REPO_URL_RE.match(url))
+
+
+def _manifest_path(proj_path):
+    return os.path.join(proj_path, "_project.json")
+
+
+def read_project_manifest(proj_path):
+    try:
+        with open(_manifest_path(proj_path), encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def write_project_manifest(proj_path, name, repo_url=""):
+    """Atomically write _project.json, preserving any other keys already there."""
+    data = read_project_manifest(proj_path)
+    data["name"] = name
+    if repo_url is not None:
+        data["repo_url"] = repo_url
+    p = _manifest_path(proj_path)
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp, p)
+    return p
+
+
 # ──────────────── sync-conflict surfacing (launch-agents T1) ────────────────
 def gather_conflicts(cfg, project_name):
     """Syncthing *.sync-conflict-* files anywhere under the project.
