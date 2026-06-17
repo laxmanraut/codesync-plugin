@@ -99,4 +99,21 @@ bash "$SCRIPTS/autonomy-run.sh" >/dev/null 2>&1
 t_eq "held per-role lock makes the cycle skip" "$NE" "$(count_reviews)"
 rmdir "$CD/autonomy-testproj-backend.lock"
 
+# ── Phase F: regression — a real agent EDITS but has no Bash to commit; the
+# runner must capture the uncommitted change as a commit and still file a review
+# (the bug live-dogfooding caught that the committing fake claude had masked). ──
+FAKE2="$T_TMP/fakeclaude-editonly"
+cat > "$FAKE2" <<'EOF'
+#!/usr/bin/env bash
+echo "edited but not committed" > editonly.txt
+printf '{"type":"result","result":"edited editonly.txt (no commit)","usage":{"input_tokens":5,"output_tokens":5}}\n'
+EOF
+chmod +x "$FAKE2"
+rm -f "$STATE"
+NF=$(count_reviews)
+CODESYNC_AUTONOMY_CLAUDE_BIN="$FAKE2" bash "$SCRIPTS/autonomy-run.sh" >/dev/null 2>&1
+t_eq    "runner captures an UNCOMMITTED edit + files a review" "$((NF+1))" "$(count_reviews)"
+t_assert "the runner-committed change is in the clone branch" \
+  test -f "$CD/autonomy-clones/testproj/backend/editonly.txt"
+
 t_done

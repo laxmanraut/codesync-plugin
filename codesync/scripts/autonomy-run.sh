@@ -206,7 +206,7 @@ PY
   __n=$(printf '%s\n' "$__cands" | wc -l | tr -d ' ')
   logln "RUN role=$__role branch=$__branch model=$MODEL tools=[$__tools] candidates=$__n"
 
-  __prompt="You are the codesync AUTONOMOUS agent for role '$__role' in project '$PROJECT'. You run UNATTENDED in an ISOLATED CLONE on branch '$__branch' — your work does NOT reach anyone until a human reviews and merges it. Work the tasks below using ONLY your allowed tools; commit your changes to this branch with clear messages. Do NOT push. Do NOT touch anything outside this repo.
+  __prompt="You are the codesync AUTONOMOUS agent for role '$__role' in project '$PROJECT'. You run UNATTENDED in an ISOLATED CLONE on branch '$__branch' — your work does NOT reach anyone until a human reviews and merges it. Work the tasks below using ONLY your allowed tools (edit files in the current directory). You do NOT need to commit or push — codesync captures your file changes for review automatically. Do NOT touch anything outside this repo.
 
 Task threads (under $PROJ_PATH):
 $__cands
@@ -239,6 +239,15 @@ try: print((json.loads(sys.stdin.read()).get("result","") or "").strip()[:300])
 except Exception: print("")')
   [ -n "$__summary" ] || __summary="(no summary; claude exit $__exit)"
 
+  # The agent edits files with Read/Edit/Write but typically has NO Bash tool to
+  # git-commit — so the runner (trusted infra) captures any working-tree changes
+  # as a commit on the branch; the review diff then reflects exactly what the
+  # agent changed. (If the agent did commit itself, there's nothing left to add.)
+  if [ -n "$(git -C "$__clone" status --porcelain 2>/dev/null)" ]; then
+    git -C "$__clone" add -A 2>/dev/null || true
+    git -C "$__clone" -c user.email=autonomy@codesync -c "user.name=codesync-$__role" \
+      commit -q -m "codesync autonomous change ($__role $__stamp)" 2>/dev/null || true
+  fi
   __head=$(git -C "$__clone" rev-parse HEAD 2>/dev/null || echo "")
   __changed=no
   if [ -n "$__base" ] && [ -n "$__head" ] && [ "$__base" != "$__head" ]; then __changed=yes; fi
