@@ -270,6 +270,23 @@ t_refute  "_docs/notes.md is gone" test -f "$PROJ/_docs/notes.md"
 DC=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"CLAUDE.md"}' "$B/api/doc-delete")
 t_contains "CLAUDE.md delete is refused" "can't be deleted" "$DC"
 
+# ── file upload (base64 → _docs/) ──
+t_eq "upload with ?t= but no header → 403" "403" \
+  "$(code -X POST -H "$J" -d '{"project":"testproj","name":"_docs/a.png","data_b64":"AAAA"}' "$B/api/upload?t=$TOKEN")"
+UB64=$(printf 'hello upload' | base64 | tr -d '\n')
+UP=$(curl -s -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d "{\"project\":\"testproj\",\"name\":\"_docs/note.txt\",\"data_b64\":\"$UB64\"}" "$B/api/upload")
+t_contains "upload writes the file"            '"ok": true' "$UP"
+t_assert  "_docs/note.txt exists"              test -f "$PROJ/_docs/note.txt"
+t_contains "uploaded content is correct"       "hello upload" "$(cat "$PROJ/_docs/note.txt" 2>/dev/null)"
+t_contains "uploaded file shows in docs list"  '_docs/note.txt' "$(curl -s -H "X-CSDash-Token: $TOKEN" "$B/api/docs?project=testproj")"
+t_eq "upload disallowed .svg → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"_docs/x.svg","data_b64":"AAAA"}' "$B/api/upload")"
+t_eq "upload traversal name → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"_docs/../escape.png","data_b64":"AAAA"}' "$B/api/upload")"
+t_eq "upload invalid base64 → 400" "400" \
+  "$(code -X POST -H "X-CSDash-Token: $TOKEN" -H "$J" -d '{"project":"testproj","name":"_docs/ok.png","data_b64":"not!!base64!!"}' "$B/api/upload")"
+t_refute "traversal upload did NOT escape the project" test -f "$PROJ/escape.png"
+
 # ── launch opens in the cloned repo (repo_path) when one is set ──
 if command -v git >/dev/null 2>&1; then
   mkdir -p "$T_TMP/code-clone"; LCLONE=$(cd "$T_TMP/code-clone" && pwd)   # normalised (matches abspath stored by set_autonomy_repo)

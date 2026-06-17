@@ -927,7 +927,10 @@ def expire_reviews(config_dir, project, ttl_hours=72, now=None):
 # .md), and the resolved path MUST be inside the project folder — so a crafted
 # name can never write outside it. Files live in the SYNCED folder, so edits
 # reach the team automatically (same as any other project file).
-_DOC_BASE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _-]*\.md$')
+_DOC_BASE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _-]*\.(md|txt)$', re.I)   # editor (text) targets
+# Upload targets: into _docs/ only, broader (text + pdf + images). No SVG — it
+# can carry script, and uploads are user-provided.
+_UPLOAD_BASE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _-]*\.(md|txt|pdf|png|jpe?g|gif|webp)$', re.I)
 
 
 def resolve_doc_path(proj_path, name):
@@ -957,15 +960,16 @@ def list_project_docs(proj_path):
     for n in ("GUARDRAILS.md", "CLAUDE.md"):
         p = os.path.join(proj_path, n)
         ex = os.path.isfile(p)
-        out.append({"name": n, "exists": ex, "fixed": True,
+        out.append({"name": n, "exists": ex, "fixed": True, "editable": True,
                     "size": os.path.getsize(p) if ex else 0})
     docs_dir = os.path.join(proj_path, "_docs")
     if os.path.isdir(docs_dir):
         for fn in sorted(os.listdir(docs_dir)):
-            if fn.endswith(".md") and resolve_doc_path(proj_path, "_docs/" + fn):
+            if resolve_upload_path(proj_path, "_docs/" + fn):   # any allowed doc/upload type
                 p = os.path.join(docs_dir, fn)
                 out.append({"name": "_docs/" + fn, "exists": True, "fixed": False,
-                            "size": os.path.getsize(p)})
+                            "size": os.path.getsize(p),
+                            "editable": bool(_DOC_BASE_RE.match(fn))})   # text only
     return out
 
 
@@ -1002,7 +1006,7 @@ def delete_project_doc(proj_path, name):
     GUARDRAILS import); everything else on the allowlist may be removed."""
     if name == "CLAUDE.md":
         return False, "CLAUDE.md can't be deleted here (it imports your rules)"
-    p = resolve_doc_path(proj_path, name)
+    p = resolve_doc_path(proj_path, name) or resolve_upload_path(proj_path, name)
     if not p:
         return False, "invalid document name"
     if not os.path.isfile(p):
@@ -1011,6 +1015,38 @@ def delete_project_doc(proj_path, name):
         os.remove(p)
     except OSError:
         return False, "could not delete"
+    return True, ""
+
+
+def resolve_upload_path(proj_path, name):
+    """Absolute path for an UPLOAD target — into _docs/ only, broader extensions
+    than the text editor (md/txt/pdf + images). None if not allowed or it would
+    resolve outside the project folder (traversal guard)."""
+    if not isinstance(name, str) or not proj_path or not name.startswith("_docs/"):
+        return None
+    base = name[len("_docs/"):]
+    if "/" in base or not _UPLOAD_BASE_RE.match(base):
+        return None
+    base_real = os.path.realpath(proj_path)
+    full = os.path.realpath(os.path.join(proj_path, "_docs", base))
+    return full if full.startswith(base_real + os.sep) else None
+
+
+def write_upload(proj_path, name, raw):
+    """Atomically write uploaded bytes to an allowlisted _docs/ target. (ok, err).
+    5MB/file cap; binary-safe."""
+    p = resolve_upload_path(proj_path, name)
+    if not p:
+        return False, "invalid upload name (use _docs/<name>.<md|txt|pdf|png|jpg|gif|webp>)"
+    if not isinstance(raw, (bytes, bytearray)):
+        return False, "no data"
+    if len(raw) > 5 * 1024 * 1024:
+        return False, "file too large (5MB max)"
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    tmp = p + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(raw)
+    os.replace(tmp, p)
     return True, ""
 
 

@@ -24,6 +24,7 @@ First stdout line is machine-parseable for dashboard-run.sh:
     DASHBOARD port=<port> token=<token>
 """
 import argparse
+import base64
 import json
 import os
 import secrets
@@ -160,6 +161,9 @@ class Handler(BaseHTTPRequestHandler):
         """Read + parse the JSON body; send 400 and return None on error."""
         try:
             length = int(self.headers.get("Content-Length", "0") or "0")
+            if length > 16 * 1024 * 1024:   # cap (uploads ride here as base64; 5MB file ≈ 6.7MB)
+                self._json({"ok": False, "error": "request too large"}, 413)
+                return None
             raw = self.rfile.read(length) if length else b""
             return json.loads(raw or b"{}")
         except Exception:
@@ -342,6 +346,17 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return
             self._create_project(body)
+            return
+
+        # upload: write an uploaded file (base64) into the project's _docs/.
+        if u.path == "/api/upload":
+            if not self._post_gate():
+                return
+            _touch()
+            body = self._read_json_body()
+            if body is None:
+                return
+            self._upload(body)
             return
 
         # doc-save / doc-delete: edit a project's rules & docs (allowlisted files).
@@ -536,6 +551,35 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._json({"ok": ok, "name": name, "repo_url": repo_url,
                     "message": (out if ok else (err or out))[-500:]}, 200 if ok else 500)
+
+    def _upload(self, body):
+        """POST /api/upload {project, name, data_b64}. Writes an uploaded file
+        into the project's _docs/ via the upload allowlist (state.write_upload:
+        _docs/<safe>.<md|txt|pdf|png|jpg|gif|webp>, inside-project, 5MB cap)."""
+        cfg = state.load_config(_ctx["config"])
+        project = self._require(body, "project", state._NAME_RE)
+        if project is None:
+            return
+        proj = (cfg.get("projects") or {}).get(project)
+        if not proj:
+            self._json({"ok": False, "error": "unknown project"}, 400)
+            return
+        pp = proj.get("path", "")
+        if not pp or not os.path.isdir(pp):
+            self._json({"ok": False, "error": "project not on this machine"}, 409)
+            return
+        data_b64 = body.get("data_b64")
+        if not isinstance(data_b64, str):
+            self._json({"ok": False, "error": "data_b64 required"}, 400)
+            return
+        try:
+            raw = base64.b64decode(data_b64, validate=True)
+        except Exception:
+            self._json({"ok": False, "error": "invalid base64 data"}, 400)
+            return
+        ok, err = state.write_upload(pp, body.get("name"), raw)
+        self._json({"ok": ok, "name": body.get("name"), "error": "" if ok else err},
+                   200 if ok else 400)
 
     def _doc_write(self, body, op):
         """POST /api/doc-save {project,name,content} | /api/doc-delete {project,name}.

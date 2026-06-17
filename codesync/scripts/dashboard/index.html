@@ -789,9 +789,11 @@ function renderDocList(list){
   const wrap=el("div",{class:"feed"});
   list.forEach(d=>{
     const right=el("span",{class:"t"});
-    const edit=el("button",{class:"btn",style:"font-size:12px;padding:4px 10px",text:d.exists?"Edit":"Create"});
-    edit.addEventListener("click",()=>openDoc(d.name));
-    right.appendChild(edit);
+    if(d.editable){
+      const edit=el("button",{class:"btn",style:"font-size:12px;padding:4px 10px",text:d.exists?"Edit":"Create"});
+      edit.addEventListener("click",()=>openDoc(d.name));
+      right.appendChild(edit);
+    }
     if(d.exists && d.name!=="CLAUDE.md"){
       const del=el("button",{class:"btn ghostred",style:"font-size:12px;padding:4px 10px;margin-left:6px",text:"Delete"});
       del.addEventListener("click",()=>docDelete(d.name,del));
@@ -802,9 +804,32 @@ function renderDocList(list){
       el("div",{},[el("b",{text:d.name}),document.createTextNode(d.exists?(" · "+d.size+" B"):" · not created")]),
       right]));
   });
-  const add=el("button",{class:"btn",style:"margin:10px 0 0",text:"＋ New doc"});
+  const add=el("button",{class:"btn",style:"margin:10px 8px 0 0",text:"＋ New doc"});
   add.addEventListener("click",newDoc);
-  box.appendChild(wrap);box.appendChild(add);
+  const fileIn=el("input",{type:"file",multiple:"multiple",style:"display:none"});
+  const upBtn=el("button",{class:"btn",style:"margin:10px 0 0",text:"⤴ Upload files"});
+  const upMsg=el("div",{style:"margin-top:6px"});
+  upBtn.addEventListener("click",()=>fileIn.click());
+  fileIn.addEventListener("change",()=>{ if(fileIn.files.length)uploadFiles(fileIn.files,upMsg); fileIn.value=""; });
+  box.appendChild(wrap);box.appendChild(add);box.appendChild(upBtn);box.appendChild(fileIn);box.appendChild(upMsg);
+}
+function readAsB64(f){return new Promise((res,rej)=>{const r=new FileReader();
+  r.onload=()=>res((String(r.result||"").split(",")[1])||"");r.onerror=rej;r.readAsDataURL(f);});}
+function uploadFiles(files,msg){
+  const arr=Array.from(files).slice(0,20);   // cap a batch at 20
+  clear(msg);msg.appendChild(el("span",{class:"hint",text:"uploading "+arr.length+" file(s)…"}));
+  Promise.all(arr.map(f=>{
+    if(f.size>5*1024*1024)return Promise.resolve({name:f.name,ok:false,err:"over 5MB"});
+    return readAsB64(f)
+      .then(b64=>post("/api/upload",{project:CURRENT,name:"_docs/"+f.name,data_b64:b64})
+        .then(({body})=>({name:f.name,ok:body.ok,err:body.error})))
+      .catch(()=>({name:f.name,ok:false,err:"read error"}));
+  })).then(results=>{
+    const bad=results.filter(r=>!r.ok);clear(msg);
+    if(bad.length)msg.appendChild(el("div",{class:"err",text:bad.length+" failed: "+bad.map(b=>b.name+(b.err?" ("+b.err+")":"")).join(", ")}));
+    else msg.appendChild(el("span",{class:"pill on",text:"uploaded ✓"}));
+    loadDocs();
+  });
 }
 function openDoc(name){
   const ed=document.getElementById("doc-editor");clear(ed);
